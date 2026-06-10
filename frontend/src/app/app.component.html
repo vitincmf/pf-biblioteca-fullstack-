@@ -1,0 +1,139 @@
+<header>
+  <h1>Sistema de Biblioteca</h1>
+  <p>PF - Angular + Django API + PostgreSQL remoto no Supabase</p>
+</header>
+
+<main>
+  <section *ngIf="mensagem" class="notice">{{ mensagem }}</section>
+  <section *ngIf="erro" class="error">{{ erro }}</section>
+
+  <section>
+    <h2>Livros</h2>
+    <p>Demonstra listagem, busca por substring, inserção, atualização, remoção e consulta com PostgreSQL.</p>
+
+    <div class="grid">
+      <input [(ngModel)]="busca" placeholder="Buscar por parte do título">
+      <button (click)="listarLivros()">Buscar/Listar</button>
+    </div>
+
+    <h3>Cadastrar livro</h3>
+    <div class="grid">
+      <input [(ngModel)]="novoLivro.titulo" placeholder="Título">
+      <input [(ngModel)]="novoLivro.autor" placeholder="Autor">
+      <input [(ngModel)]="novoLivro.editora" placeholder="Editora">
+      <input type="number" [(ngModel)]="novoLivro.ano_publicacao" placeholder="Ano">
+      <select [(ngModel)]="novoLivro.id_categoria">
+        <option *ngFor="let c of categorias" [value]="c.id_categoria">{{ c.nome }}</option>
+      </select>
+      <button (click)="criarLivro()">Inserir livro</button>
+    </div>
+
+    <h3>Editar livro selecionado</h3>
+    <div class="grid">
+      <input type="number" [(ngModel)]="livroEdicao.id_livro" placeholder="ID livro">
+      <input [(ngModel)]="livroEdicao.titulo" placeholder="Título">
+      <input [(ngModel)]="livroEdicao.autor" placeholder="Autor">
+      <input [(ngModel)]="livroEdicao.editora" placeholder="Editora">
+      <input type="number" [(ngModel)]="livroEdicao.ano_publicacao" placeholder="Ano">
+      <select [(ngModel)]="livroEdicao.id_categoria">
+        <option *ngFor="let c of categorias" [value]="c.id_categoria">{{ c.nome }}</option>
+      </select>
+      <button (click)="atualizarLivro()">Atualizar livro</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th><th>Título</th><th>Autor</th><th>Categoria</th><th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let livro of livros">
+          <td>{{ livro.id_livro }}</td>
+          <td>{{ livro.titulo }}</td>
+          <td>{{ livro.autor }}</td>
+          <td>{{ livro.categoria }}</td>
+          <td>
+            <button class="secondary" (click)="prepararEdicao(livro)">Editar</button>
+            <button class="danger" (click)="removerLivro(livro.id_livro)">Remover</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Cadastro de aluno</h2>
+    <p>Operação composta simples: a API insere em USUARIO e ALUNO.</p>
+    <div class="grid">
+      <input [(ngModel)]="novoAluno.nome" placeholder="Nome">
+      <input [(ngModel)]="novoAluno.email" placeholder="Email">
+      <input [(ngModel)]="novoAluno.endereco" placeholder="Endereço">
+      <input [(ngModel)]="novoAluno.matricula" placeholder="Matrícula">
+      <input [(ngModel)]="novoAluno.curso" placeholder="Curso">
+      <input type="number" min="1" step="1" [(ngModel)]="novoAluno.semestre" placeholder="Semestre">
+      <button (click)="criarAluno()">Cadastrar aluno</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Cadastro de funcionário</h2>
+    <p>A API insere em USUARIO e FUNCIONARIO, respeitando a especialização exclusiva.</p>
+    <div class="grid">
+      <input [(ngModel)]="novoFuncionario.nome" placeholder="Nome">
+      <input [(ngModel)]="novoFuncionario.email" placeholder="Email">
+      <input [(ngModel)]="novoFuncionario.endereco" placeholder="Endereço">
+      <input [(ngModel)]="novoFuncionario.cargo" placeholder="Cargo">
+      <input [(ngModel)]="novoFuncionario.setor" placeholder="Setor">
+      <input type="number" [(ngModel)]="novoFuncionario.salario" placeholder="Salário">
+      <button (click)="criarFuncionario()">Cadastrar funcionário</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Criar empréstimo</h2>
+    <p>Operação composta: EMPRESTIMO + REALIZA_EMPRESTIMO + REGISTRA_ITEM.</p>
+    <div class="grid">
+      <input type="date" [(ngModel)]="novoEmprestimo.data_emprestimo">
+      <input type="date" [(ngModel)]="novoEmprestimo.data_devolucao">
+      <input type="number" [(ngModel)]="novoEmprestimo.multa" placeholder="Multa">
+      <input [(ngModel)]="novoEmprestimo.alunosTexto" placeholder="IDs alunos separados por vírgula">
+      <input [(ngModel)]="novoEmprestimo.livrosTexto" placeholder="IDs livros separados por vírgula">
+      <input type="number" [(ngModel)]="novoEmprestimo.id_funcionario" placeholder="ID funcionário">
+      <input [(ngModel)]="novoEmprestimo.observacao" placeholder="Observação">
+      <button (click)="criarEmprestimo()">Criar empréstimo</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Relatórios</h2>
+    <p>Demonstra JOIN via VIEW, GROUP BY com agregação e HAVING.</p>
+    <div class="grid">
+      <button (click)="carregarHistorico()">Histórico de empréstimos - VIEW/JOIN</button>
+      <button (click)="carregarLivrosPorCategoria()">Livros por categoria - GROUP BY</button>
+      <button (click)="carregarHaving()">Categorias com mais de 1 livro - HAVING</button>
+    </div>
+
+    <table *ngIf="relatorio.length">
+      <thead>
+        <tr>
+          <th *ngFor="let col of colunas(relatorio[0])">{{ col }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let linha of relatorio">
+          <td *ngFor="let col of colunas(linha)">{{ linha[col] }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Testes de banco</h2>
+    <p>Essas ações demonstram erro de integridade e acionamento de trigger no PostgreSQL.</p>
+    <div class="grid">
+      <button class="danger" (click)="testarGatilho()">Acionar gatilho de data inválida</button>
+      <button class="danger" (click)="testarErroIntegridade()">Gerar erro de integridade</button>
+    </div>
+  </section>
+</main>
