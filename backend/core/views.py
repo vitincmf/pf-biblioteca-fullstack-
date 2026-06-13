@@ -1,9 +1,10 @@
+from django.contrib.auth.hashers import check_password, make_password
 from django.db import DatabaseError, IntegrityError, connection, transaction
+
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .db import dictfetchall, dictfetchone, run_select
-
 
 def erro_banco(exc, status=400):
     return Response(
@@ -495,3 +496,111 @@ class TesteErroIntegridadeView(APIView):
                 },
                 status=400,
             )
+        
+class AuthRegisterView(APIView):
+    def post(self, request):
+        nome = request.data.get('nome')
+        email = request.data.get('email')
+        senha = request.data.get('senha')
+        endereco = request.data.get('endereco')
+        status_usuario = request.data.get('status', 'ATIVO')
+
+        if not nome or not email or not senha:
+            return Response(
+                {'erro': 'Nome, email e senha sao obrigatorios.'},
+                status=400
+            )
+
+        if len(senha) < 4:
+            return Response(
+                {'erro': 'A senha deve ter pelo menos 4 caracteres.'},
+                status=400
+            )
+
+        senha_hash = make_password(senha)
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    INSERT INTO usuario (nome, email, endereco, status, senha_hash)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id_usuario, nome, email, endereco, status;
+                    ''',
+                    [nome, email, endereco, status_usuario, senha_hash]
+                )
+
+                usuario = dictfetchone(cursor)
+
+            return Response(
+                {
+                    'mensagem': 'Usuario cadastrado com sucesso.',
+                    'usuario': usuario
+                },
+                status=201
+            )
+
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+        
+        
+class AuthLoginView(APIView):
+    def post(self, request):
+        email = request.data.get('email')
+        senha = request.data.get('senha')
+
+        if not email or not senha:
+            return Response(
+                {'erro': 'Email e senha sao obrigatorios.'},
+                status=400
+            )
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    SELECT id_usuario, nome, email, endereco, status, senha_hash
+                    FROM usuario
+                    WHERE email = %s;
+                    ''',
+                    [email]
+                )
+
+                usuario = dictfetchone(cursor)
+
+            if not usuario:
+                return Response(
+                    {'erro': 'Email ou senha invalidos.'},
+                    status=401
+                )
+
+            if usuario['status'] != 'ATIVO':
+                return Response(
+                    {'erro': 'Usuario inativo. Login nao permitido.'},
+                    status=403
+                )
+
+            if not usuario.get('senha_hash'):
+                return Response(
+                    {'erro': 'Usuario ainda nao possui senha cadastrada.'},
+                    status=400
+                )
+
+            if not check_password(senha, usuario['senha_hash']):
+                return Response(
+                    {'erro': 'Email ou senha invalidos.'},
+                    status=401
+                )
+
+            usuario.pop('senha_hash', None)
+
+            return Response(
+                {
+                    'mensagem': 'Login realizado com sucesso.',
+                    'usuario': usuario
+                },
+                status=200
+            )
+
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
