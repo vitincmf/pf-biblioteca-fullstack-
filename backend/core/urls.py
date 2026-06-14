@@ -20,6 +20,7 @@ urlpatterns = [
     path('funcionarios/', views.FuncionarioListCreateView.as_view()),
 
     path('emprestimos/', views.EmprestimoListCreateView.as_view()),
+    path('emprestimos/<int:id_emprestimo>/devolver/', views.EmprestimoDevolverView.as_view()),
     path('emprestimos/testar-gatilho/', views.TesteGatilhoEmprestimoView.as_view()),
 
     path('relatorios/historico/', views.HistoricoEmprestimosView.as_view()),
