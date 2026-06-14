@@ -11,6 +11,10 @@ def erro_validacao(mensagem):
     return Response({'erro': mensagem}, status=400)
 
 
+def erro_conflito(payload):
+    return Response(payload, status=409)
+
+
 def normalizar_lista_ids(valor, nome_campo):
     if valor in (None, ''):
         return [], f'Informe {nome_campo}.'
@@ -401,6 +405,51 @@ class EmprestimoListCreateView(APIView):
         try:
             with transaction.atomic():
                 with connection.cursor() as cursor:
+                    cursor.execute(
+                        '''
+                        SELECT 1
+                        FROM realiza_emprestimo re
+                        JOIN emprestimo e ON e.id_emprestimo = re.id_emprestimo
+                        WHERE re.id_aluno = %s
+                          AND e.data_devolucao < CURRENT_DATE
+                        LIMIT 1;
+                        ''',
+                        [alunos[0]],
+                    )
+
+                    if cursor.fetchone():
+                        return erro_conflito(
+                            {
+                                'erro': 'Aluno possui emprestimo vencido e nao pode realizar novo emprestimo.'
+                            }
+                        )
+
+                    cursor.execute(
+                        '''
+                        SELECT DISTINCT ri.id_livro
+                        FROM registra_item ri
+                        JOIN emprestimo e ON e.id_emprestimo = ri.id_emprestimo
+                        WHERE ri.id_livro = ANY(%s)
+                          AND e.data_emprestimo <= %s
+                          AND e.data_devolucao >= %s
+                        ORDER BY ri.id_livro;
+                        ''',
+                        [
+                            livros,
+                            request.data.get('data_devolucao'),
+                            request.data.get('data_emprestimo'),
+                        ],
+                    )
+                    livros_indisponiveis = [row[0] for row in cursor.fetchall()]
+
+                    if livros_indisponiveis:
+                        return erro_conflito(
+                            {
+                                'erro': 'Livro indisponivel para emprestimo.',
+                                'livros_indisponiveis': livros_indisponiveis,
+                            }
+                        )
+
                     cursor.execute(
                         '''
                         INSERT INTO emprestimo (data_emprestimo, data_devolucao, multa, observacao)
