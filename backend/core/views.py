@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import DatabaseError, IntegrityError, connection, transaction
 
@@ -13,6 +15,21 @@ def erro_validacao(mensagem):
 
 def erro_conflito(payload):
     return Response(payload, status=409)
+
+
+def normalizar_multa(valor):
+    if valor in (None, ''):
+        return None, None
+
+    try:
+        multa = Decimal(str(valor))
+    except (InvalidOperation, TypeError, ValueError):
+        return None, 'Multa deve ser numerica.'
+
+    if multa < 0:
+        return None, 'Multa nao pode ser negativa.'
+
+    return multa, None
 
 
 def normalizar_lista_ids(valor, nome_campo):
@@ -411,6 +428,7 @@ class EmprestimoListCreateView(APIView):
                         FROM realiza_emprestimo re
                         JOIN emprestimo e ON e.id_emprestimo = re.id_emprestimo
                         WHERE re.id_aluno = %s
+                          AND e.status = 'ATIVO'
                           AND e.data_devolucao < CURRENT_DATE
                         LIMIT 1;
                         ''',
@@ -430,6 +448,7 @@ class EmprestimoListCreateView(APIView):
                         FROM registra_item ri
                         JOIN emprestimo e ON e.id_emprestimo = ri.id_emprestimo
                         WHERE ri.id_livro = ANY(%s)
+                          AND e.status = 'ATIVO'
                           AND e.data_emprestimo <= %s
                           AND e.data_devolucao >= %s
                         ORDER BY ri.id_livro;
@@ -454,7 +473,8 @@ class EmprestimoListCreateView(APIView):
                         '''
                         INSERT INTO emprestimo (data_emprestimo, data_devolucao, multa, observacao)
                         VALUES (%s, %s, %s, %s)
-                        RETURNING id_emprestimo, data_emprestimo, data_devolucao, multa, observacao;
+                        RETURNING id_emprestimo, data_emprestimo, data_devolucao,
+                                  multa, observacao, status, data_devolucao_real;
                         ''',
                         [
                             request.data.get('data_emprestimo'),
@@ -494,6 +514,83 @@ class EmprestimoListCreateView(APIView):
                     'id_funcionario': id_funcionario,
                 },
                 status=201,
+            )
+
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+
+class EmprestimoDevolverView(APIView):
+    def post(self, request, id_emprestimo):
+        data_devolucao_real = request.data.get('data_devolucao_real') or None
+        multa, erro_multa = normalizar_multa(request.data.get('multa'))
+
+        if erro_multa:
+            return erro_validacao(erro_multa)
+
+        try:
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        '''
+                        SELECT id_emprestimo, status
+                        FROM emprestimo
+                        WHERE id_emprestimo = %s
+                        FOR UPDATE;
+                        ''',
+                        [id_emprestimo],
+                    )
+                    emprestimo = dictfetchone(cursor)
+
+                    if not emprestimo:
+                        return Response(
+                            {'erro': 'Emprestimo nao encontrado.'},
+                            status=404,
+                        )
+
+                    if emprestimo['status'] == 'DEVOLVIDO':
+                        return erro_conflito(
+                            {'erro': 'Emprestimo ja foi devolvido.'}
+                        )
+
+                    if emprestimo['status'] == 'CANCELADO':
+                        return erro_conflito(
+                            {'erro': 'Emprestimo cancelado nao pode ser devolvido.'}
+                        )
+
+                    cursor.execute(
+                        '''
+                        UPDATE emprestimo
+                        SET status = 'DEVOLVIDO',
+                            data_devolucao_real = COALESCE(%s::date, CURRENT_DATE),
+                            multa = CASE
+                                WHEN %s::boolean THEN %s::numeric
+                                ELSE GREATEST(
+                                    COALESCE(%s::date, CURRENT_DATE) - data_devolucao,
+                                    0
+                                )::numeric * 1.00
+                            END
+                        WHERE id_emprestimo = %s
+                        RETURNING id_emprestimo, status, data_devolucao_real, multa;
+                        ''',
+                        [
+                            data_devolucao_real,
+                            multa is not None,
+                            multa,
+                            data_devolucao_real,
+                            id_emprestimo,
+                        ],
+                    )
+                    devolucao = dictfetchone(cursor)
+
+            return Response(
+                {
+                    'mensagem': 'Emprestimo devolvido com sucesso.',
+                    'id_emprestimo': devolucao['id_emprestimo'],
+                    'status': devolucao['status'],
+                    'data_devolucao_real': devolucao['data_devolucao_real'],
+                    'multa': devolucao['multa'],
+                }
             )
 
         except (IntegrityError, DatabaseError) as exc:
