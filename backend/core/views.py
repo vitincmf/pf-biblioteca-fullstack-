@@ -6,6 +6,36 @@ from rest_framework.views import APIView
 
 from .db import dictfetchall, dictfetchone, run_select
 
+
+def erro_validacao(mensagem):
+    return Response({'erro': mensagem}, status=400)
+
+
+def normalizar_lista_ids(valor, nome_campo):
+    if valor in (None, ''):
+        return [], f'Informe {nome_campo}.'
+
+    if not isinstance(valor, (list, tuple)):
+        return [], f'{nome_campo} deve ser uma lista de IDs.'
+
+    ids = []
+    for item in valor:
+        try:
+            id_normalizado = int(item)
+        except (TypeError, ValueError):
+            return [], f'{nome_campo} deve conter apenas IDs numericos.'
+
+        if id_normalizado <= 0:
+            return [], f'{nome_campo} deve conter apenas IDs positivos.'
+
+        ids.append(id_normalizado)
+
+    if not ids:
+        return [], f'Informe {nome_campo}.'
+
+    return ids, None
+
+
 def erro_banco(exc, status=400):
     return Response(
         {
@@ -335,15 +365,38 @@ class EmprestimoListCreateView(APIView):
         return Response(dados)
 
     def post(self, request):
-        alunos = request.data.get('alunos', [])
-        livros = request.data.get('livros', [])
+        alunos, erro_alunos = normalizar_lista_ids(
+            request.data.get('alunos'),
+            'alunos',
+        )
+        livros, erro_livros = normalizar_lista_ids(
+            request.data.get('livros'),
+            'livros',
+        )
         id_funcionario = request.data.get('id_funcionario')
 
-        if not alunos or not livros or not id_funcionario:
-            return Response(
-                {'erro': 'Informe alunos, livros e id_funcionario.'},
-                status=400,
-            )
+        if erro_alunos:
+            return erro_validacao(erro_alunos)
+
+        if len(alunos) > 1:
+            return erro_validacao('Informe apenas um aluno por emprestimo.')
+
+        if erro_livros:
+            return erro_validacao(erro_livros)
+
+        if len(livros) != len(set(livros)):
+            return erro_validacao('Nao informe o mesmo livro mais de uma vez.')
+
+        if not id_funcionario:
+            return erro_validacao('Informe id_funcionario.')
+
+        try:
+            id_funcionario = int(id_funcionario)
+        except (TypeError, ValueError):
+            return erro_validacao('id_funcionario deve ser numerico.')
+
+        if id_funcionario <= 0:
+            return erro_validacao('id_funcionario deve ser positivo.')
 
         try:
             with transaction.atomic():
