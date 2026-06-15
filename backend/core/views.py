@@ -465,6 +465,75 @@ class EmprestimoListCreateView(APIView):
                 with connection.cursor() as cursor:
                     cursor.execute(
                         '''
+                        SELECT u.status
+                        FROM aluno a
+                        JOIN usuario u ON u.id_usuario = a.id_usuario
+                        WHERE a.id_usuario = %s;
+                        ''',
+                        [alunos[0]],
+                    )
+                    aluno = dictfetchone(cursor)
+
+                    if not aluno:
+                        return Response(
+                            {'erro': 'Aluno nao encontrado.'},
+                            status=404,
+                        )
+
+                    if aluno['status'] != 'ATIVO':
+                        return erro_validacao(
+                            'Aluno inativo nao pode realizar emprestimo.'
+                        )
+
+                    cursor.execute(
+                        '''
+                        SELECT u.status
+                        FROM funcionario f
+                        JOIN usuario u ON u.id_usuario = f.id_usuario
+                        WHERE f.id_usuario = %s;
+                        ''',
+                        [id_funcionario],
+                    )
+                    funcionario = dictfetchone(cursor)
+
+                    if not funcionario:
+                        return Response(
+                            {'erro': 'Funcionario nao encontrado.'},
+                            status=404,
+                        )
+
+                    if funcionario['status'] != 'ATIVO':
+                        return erro_validacao(
+                            'Funcionario inativo nao pode registrar emprestimo.'
+                        )
+
+                    cursor.execute(
+                        '''
+                        SELECT id_livro
+                        FROM livro
+                        WHERE id_livro = ANY(%s)
+                        ORDER BY id_livro;
+                        ''',
+                        [livros],
+                    )
+                    livros_encontrados = {row[0] for row in cursor.fetchall()}
+                    livros_nao_encontrados = [
+                        id_livro
+                        for id_livro in livros
+                        if id_livro not in livros_encontrados
+                    ]
+
+                    if livros_nao_encontrados:
+                        return Response(
+                            {
+                                'erro': 'Livro(s) nao encontrado(s).',
+                                'livros_nao_encontrados': livros_nao_encontrados,
+                            },
+                            status=404,
+                        )
+
+                    cursor.execute(
+                        '''
                         SELECT 1
                         FROM realiza_emprestimo re
                         JOIN emprestimo e ON e.id_emprestimo = re.id_emprestimo
