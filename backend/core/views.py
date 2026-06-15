@@ -901,6 +901,42 @@ class AuthLoginView(APIView):
                     status=401
                 )
 
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    SELECT 1
+                    FROM aluno
+                    WHERE id_usuario = %s;
+                    ''',
+                    [usuario['id_usuario']]
+                )
+                possui_perfil_aluno = cursor.fetchone() is not None
+
+                cursor.execute(
+                    '''
+                    SELECT 1
+                    FROM funcionario
+                    WHERE id_usuario = %s;
+                    ''',
+                    [usuario['id_usuario']]
+                )
+                possui_perfil_funcionario = cursor.fetchone() is not None
+
+            # O modelo exige especializacao exclusiva; se o banco estiver
+            # inconsistente, o login deve falhar em vez de assumir um perfil.
+            if possui_perfil_aluno and possui_perfil_funcionario:
+                return Response(
+                    {'erro': 'Usuario possui perfis conflitantes.'},
+                    status=409
+                )
+
+            if possui_perfil_aluno:
+                usuario['perfil'] = 'aluno'
+            elif possui_perfil_funcionario:
+                usuario['perfil'] = 'funcionario'
+            else:
+                usuario['perfil'] = 'nenhum'
+
             usuario.pop('senha_hash', None)
 
             return Response(
