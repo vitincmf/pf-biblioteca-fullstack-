@@ -271,6 +271,20 @@ class AlunoListCreateView(APIView):
         return Response(dados)
 
     def post(self, request):
+        senha = request.data.get('senha')
+
+        if not senha:
+            return Response(
+                {'erro': 'Senha e obrigatoria para cadastrar aluno.'},
+                status=400,
+            )
+
+        if len(senha) < 4:
+            return Response(
+                {'erro': 'A senha deve ter pelo menos 4 caracteres.'},
+                status=400,
+            )
+
         semestre = request.data.get('semestre')
 
         if semestre in (None, ''):
@@ -295,8 +309,8 @@ class AlunoListCreateView(APIView):
                 with connection.cursor() as cursor:
                     cursor.execute(
                         '''
-                        INSERT INTO usuario (nome, email, endereco, status)
-                        VALUES (%s, %s, %s, COALESCE(%s, 'ATIVO'))
+                        INSERT INTO usuario (nome, email, endereco, status, senha_hash)
+                        VALUES (%s, %s, %s, COALESCE(%s, 'ATIVO'), %s)
                         RETURNING id_usuario;
                         ''',
                         [
@@ -304,6 +318,7 @@ class AlunoListCreateView(APIView):
                             request.data.get('email'),
                             request.data.get('endereco'),
                             request.data.get('status'),
+                            make_password(senha),
                         ],
                     )
 
@@ -350,13 +365,27 @@ class FuncionarioListCreateView(APIView):
         return Response(dados)
 
     def post(self, request):
+        senha = request.data.get('senha')
+
+        if not senha:
+            return Response(
+                {'erro': 'Senha e obrigatoria para cadastrar funcionario.'},
+                status=400,
+            )
+
+        if len(senha) < 4:
+            return Response(
+                {'erro': 'A senha deve ter pelo menos 4 caracteres.'},
+                status=400,
+            )
+
         try:
             with transaction.atomic():
                 with connection.cursor() as cursor:
                     cursor.execute(
                         '''
-                        INSERT INTO usuario (nome, email, endereco, status)
-                        VALUES (%s, %s, %s, COALESCE(%s, 'ATIVO'))
+                        INSERT INTO usuario (nome, email, endereco, status, senha_hash)
+                        VALUES (%s, %s, %s, COALESCE(%s, 'ATIVO'), %s)
                         RETURNING id_usuario;
                         ''',
                         [
@@ -364,6 +393,7 @@ class FuncionarioListCreateView(APIView):
                             request.data.get('email'),
                             request.data.get('endereco'),
                             request.data.get('status'),
+                            make_password(senha),
                         ],
                     )
 
@@ -811,12 +841,19 @@ class AuthRegisterView(APIView):
         nome = request.data.get('nome')
         email = request.data.get('email')
         senha = request.data.get('senha')
+        perfil = request.data.get('perfil')
         endereco = request.data.get('endereco')
         status_usuario = request.data.get('status', 'ATIVO')
 
-        if not nome or not email or not senha:
+        if not nome or not email or not senha or not perfil:
             return Response(
-                {'erro': 'Nome, email e senha sao obrigatorios.'},
+                {'erro': 'Nome, email, senha e perfil sao obrigatorios.'},
+                status=400
+            )
+
+        if perfil not in ('aluno', 'funcionario'):
+            return Response(
+                {'erro': 'Perfil deve ser aluno ou funcionario.'},
                 status=400
             )
 
@@ -826,25 +863,92 @@ class AuthRegisterView(APIView):
                 status=400
             )
 
+        if perfil == 'aluno':
+            if not request.data.get('matricula') or not request.data.get('curso'):
+                return Response(
+                    {'erro': 'Matricula e curso sao obrigatorios para aluno.'},
+                    status=400
+                )
+
+            semestre = request.data.get('semestre')
+            if semestre in (None, ''):
+                semestre = None
+            else:
+                try:
+                    semestre = int(semestre)
+                except (TypeError, ValueError):
+                    return Response(
+                        {'erro': 'Semestre deve ser um numero inteiro.'},
+                        status=400,
+                    )
+
+                if semestre < 1:
+                    return Response(
+                        {'erro': 'Semestre deve ser maior ou igual a 1.'},
+                        status=400,
+                    )
+        else:
+            if not request.data.get('cargo') or not request.data.get('setor'):
+                return Response(
+                    {'erro': 'Cargo e setor sao obrigatorios para funcionario.'},
+                    status=400
+                )
+
         senha_hash = make_password(senha)
 
         try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    '''
-                    INSERT INTO usuario (nome, email, endereco, status, senha_hash)
-                    VALUES (%s, %s, %s, %s, %s)
-                    RETURNING id_usuario, nome, email, endereco, status;
-                    ''',
-                    [nome, email, endereco, status_usuario, senha_hash]
-                )
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        '''
+                        INSERT INTO usuario (nome, email, endereco, status, senha_hash)
+                        VALUES (%s, %s, %s, %s, %s)
+                        RETURNING id_usuario, nome, email, endereco, status;
+                        ''',
+                        [nome, email, endereco, status_usuario, senha_hash]
+                    )
 
-                usuario = dictfetchone(cursor)
+                    usuario = dictfetchone(cursor)
+                    usuario['perfil'] = perfil
+
+                    if perfil == 'aluno':
+                        cursor.execute(
+                            '''
+                            INSERT INTO aluno (id_usuario, matricula, curso, semestre, observacao)
+                            VALUES (%s, %s, %s, %s, %s)
+                            RETURNING *;
+                            ''',
+                            [
+                                usuario['id_usuario'],
+                                request.data.get('matricula'),
+                                request.data.get('curso'),
+                                semestre,
+                                request.data.get('observacao'),
+                            ]
+                        )
+                        perfil_dados = {'aluno': dictfetchone(cursor)}
+                    else:
+                        cursor.execute(
+                            '''
+                            INSERT INTO funcionario (id_usuario, cargo, setor, salario, observacao)
+                            VALUES (%s, %s, %s, %s, %s)
+                            RETURNING *;
+                            ''',
+                            [
+                                usuario['id_usuario'],
+                                request.data.get('cargo'),
+                                request.data.get('setor'),
+                                request.data.get('salario'),
+                                request.data.get('observacao'),
+                            ]
+                        )
+                        perfil_dados = {'funcionario': dictfetchone(cursor)}
 
             return Response(
                 {
                     'mensagem': 'Usuario cadastrado com sucesso.',
-                    'usuario': usuario
+                    'usuario': usuario,
+                    **perfil_dados,
                 },
                 status=201
             )
