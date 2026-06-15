@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.hashers import check_password, make_password
@@ -30,6 +31,23 @@ def normalizar_multa(valor):
         return None, 'Multa nao pode ser negativa.'
 
     return multa, None
+
+
+def normalizar_multa_criacao(valor):
+    if valor in (None, ''):
+        return Decimal('0'), None
+
+    return normalizar_multa(valor)
+
+
+def normalizar_data_iso(valor, nome_campo):
+    if valor in (None, ''):
+        return None, f'Informe {nome_campo}.'
+
+    try:
+        return date.fromisoformat(str(valor)), None
+    except (TypeError, ValueError):
+        return None, 'Datas devem estar no formato YYYY-MM-DD.'
 
 
 def normalizar_lista_ids(valor, nome_campo):
@@ -405,9 +423,6 @@ class EmprestimoListCreateView(APIView):
         if erro_livros:
             return erro_validacao(erro_livros)
 
-        if len(livros) != len(set(livros)):
-            return erro_validacao('Nao informe o mesmo livro mais de uma vez.')
-
         if not id_funcionario:
             return erro_validacao('Informe id_funcionario.')
 
@@ -418,6 +433,32 @@ class EmprestimoListCreateView(APIView):
 
         if id_funcionario <= 0:
             return erro_validacao('id_funcionario deve ser positivo.')
+
+        data_emprestimo, erro_data_emprestimo = normalizar_data_iso(
+            request.data.get('data_emprestimo'),
+            'data_emprestimo',
+        )
+        if erro_data_emprestimo:
+            return erro_validacao(erro_data_emprestimo)
+
+        data_devolucao, erro_data_devolucao = normalizar_data_iso(
+            request.data.get('data_devolucao'),
+            'data_devolucao',
+        )
+        if erro_data_devolucao:
+            return erro_validacao(erro_data_devolucao)
+
+        if data_devolucao < data_emprestimo:
+            return erro_validacao(
+                'data_devolucao nao pode ser anterior a data_emprestimo.'
+            )
+
+        multa, erro_multa = normalizar_multa_criacao(request.data.get('multa'))
+        if erro_multa:
+            return erro_validacao(erro_multa)
+
+        if len(livros) != len(set(livros)):
+            return erro_validacao('Nao informe o mesmo livro mais de uma vez.')
 
         try:
             with transaction.atomic():
@@ -455,8 +496,8 @@ class EmprestimoListCreateView(APIView):
                         ''',
                         [
                             livros,
-                            request.data.get('data_devolucao'),
-                            request.data.get('data_emprestimo'),
+                            data_devolucao,
+                            data_emprestimo,
                         ],
                     )
                     livros_indisponiveis = [row[0] for row in cursor.fetchall()]
@@ -477,9 +518,9 @@ class EmprestimoListCreateView(APIView):
                                   multa, observacao, status, data_devolucao_real;
                         ''',
                         [
-                            request.data.get('data_emprestimo'),
-                            request.data.get('data_devolucao'),
-                            request.data.get('multa'),
+                            data_emprestimo,
+                            data_devolucao,
+                            multa,
                             request.data.get('observacao'),
                         ],
                     )
