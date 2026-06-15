@@ -1,88 +1,23 @@
-from datetime import date
-from decimal import Decimal, InvalidOperation
-
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.hashers import check_password
 from django.db import DatabaseError, IntegrityError, connection, transaction
 
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .db import dictfetchall, dictfetchone, run_select
-
-
-def erro_validacao(mensagem):
-    return Response({'erro': mensagem}, status=400)
-
-
-def erro_conflito(payload):
-    return Response(payload, status=409)
-
-
-def normalizar_multa(valor):
-    if valor in (None, ''):
-        return None, None
-
-    try:
-        multa = Decimal(str(valor))
-    except (InvalidOperation, TypeError, ValueError):
-        return None, 'Multa deve ser numerica.'
-
-    if multa < 0:
-        return None, 'Multa nao pode ser negativa.'
-
-    return multa, None
-
-
-def normalizar_multa_criacao(valor):
-    if valor in (None, ''):
-        return Decimal('0'), None
-
-    return normalizar_multa(valor)
-
-
-def normalizar_data_iso(valor, nome_campo):
-    if valor in (None, ''):
-        return None, f'Informe {nome_campo}.'
-
-    try:
-        return date.fromisoformat(str(valor)), None
-    except (TypeError, ValueError):
-        return None, 'Datas devem estar no formato YYYY-MM-DD.'
-
-
-def normalizar_lista_ids(valor, nome_campo):
-    if valor in (None, ''):
-        return [], f'Informe {nome_campo}.'
-
-    if not isinstance(valor, (list, tuple)):
-        return [], f'{nome_campo} deve ser uma lista de IDs.'
-
-    ids = []
-    for item in valor:
-        try:
-            id_normalizado = int(item)
-        except (TypeError, ValueError):
-            return [], f'{nome_campo} deve conter apenas IDs numericos.'
-
-        if id_normalizado <= 0:
-            return [], f'{nome_campo} deve conter apenas IDs positivos.'
-
-        ids.append(id_normalizado)
-
-    if not ids:
-        return [], f'Informe {nome_campo}.'
-
-    return ids, None
-
-
-def erro_banco(exc, status=400):
-    return Response(
-        {
-            'erro': 'Operacao rejeitada pelo PostgreSQL.',
-            'detalhes': str(exc),
-        },
-        status=status,
-    )
+from .db import dictfetchone, run_select
+from .responses import erro_banco, erro_conflito, erro_validacao
+from .services.usuarios import (
+    criar_usuario_com_senha,
+    obter_perfil_usuario,
+    validar_senha,
+)
+from .validators import (
+    normalizar_data_iso,
+    normalizar_lista_ids,
+    normalizar_multa,
+    normalizar_multa_criacao,
+    normalizar_semestre,
+)
 
 
 class HealthView(APIView):
@@ -273,56 +208,28 @@ class AlunoListCreateView(APIView):
     def post(self, request):
         senha = request.data.get('senha')
 
-        if not senha:
-            return Response(
-                {'erro': 'Senha e obrigatoria para cadastrar aluno.'},
-                status=400,
-            )
+        erro_senha = validar_senha(
+            senha,
+            'Senha e obrigatoria para cadastrar aluno.',
+        )
+        if erro_senha:
+            return erro_validacao(erro_senha)
 
-        if len(senha) < 4:
-            return Response(
-                {'erro': 'A senha deve ter pelo menos 4 caracteres.'},
-                status=400,
-            )
-
-        semestre = request.data.get('semestre')
-
-        if semestre in (None, ''):
-            semestre = None
-        else:
-            try:
-                semestre = int(semestre)
-            except (TypeError, ValueError):
-                return Response(
-                    {'erro': 'Semestre deve ser um numero inteiro.'},
-                    status=400,
-                )
-
-            if semestre < 1:
-                return Response(
-                    {'erro': 'Semestre deve ser maior ou igual a 1.'},
-                    status=400,
-                )
+        semestre, erro_semestre = normalizar_semestre(request.data.get('semestre'))
+        if erro_semestre:
+            return erro_validacao(erro_semestre)
 
         try:
             with transaction.atomic():
                 with connection.cursor() as cursor:
-                    cursor.execute(
-                        '''
-                        INSERT INTO usuario (nome, email, endereco, status, senha_hash)
-                        VALUES (%s, %s, %s, COALESCE(%s, 'ATIVO'), %s)
-                        RETURNING id_usuario;
-                        ''',
-                        [
-                            request.data.get('nome'),
-                            request.data.get('email'),
-                            request.data.get('endereco'),
-                            request.data.get('status'),
-                            make_password(senha),
-                        ],
+                    id_usuario = criar_usuario_com_senha(
+                        cursor,
+                        request.data.get('nome'),
+                        request.data.get('email'),
+                        request.data.get('endereco'),
+                        request.data.get('status'),
+                        senha,
                     )
-
-                    id_usuario = cursor.fetchone()[0]
 
                     cursor.execute(
                         '''
@@ -367,37 +274,24 @@ class FuncionarioListCreateView(APIView):
     def post(self, request):
         senha = request.data.get('senha')
 
-        if not senha:
-            return Response(
-                {'erro': 'Senha e obrigatoria para cadastrar funcionario.'},
-                status=400,
-            )
-
-        if len(senha) < 4:
-            return Response(
-                {'erro': 'A senha deve ter pelo menos 4 caracteres.'},
-                status=400,
-            )
+        erro_senha = validar_senha(
+            senha,
+            'Senha e obrigatoria para cadastrar funcionario.',
+        )
+        if erro_senha:
+            return erro_validacao(erro_senha)
 
         try:
             with transaction.atomic():
                 with connection.cursor() as cursor:
-                    cursor.execute(
-                        '''
-                        INSERT INTO usuario (nome, email, endereco, status, senha_hash)
-                        VALUES (%s, %s, %s, COALESCE(%s, 'ATIVO'), %s)
-                        RETURNING id_usuario;
-                        ''',
-                        [
-                            request.data.get('nome'),
-                            request.data.get('email'),
-                            request.data.get('endereco'),
-                            request.data.get('status'),
-                            make_password(senha),
-                        ],
+                    id_usuario = criar_usuario_com_senha(
+                        cursor,
+                        request.data.get('nome'),
+                        request.data.get('email'),
+                        request.data.get('endereco'),
+                        request.data.get('status'),
+                        senha,
                     )
-
-                    id_usuario = cursor.fetchone()[0]
 
                     cursor.execute(
                         '''
@@ -857,9 +751,13 @@ class AuthRegisterView(APIView):
                 status=400
             )
 
-        if len(senha) < 4:
+        erro_senha = validar_senha(
+            senha,
+            'Nome, email, senha e perfil sao obrigatorios.',
+        )
+        if erro_senha:
             return Response(
-                {'erro': 'A senha deve ter pelo menos 4 caracteres.'},
+                {'erro': erro_senha},
                 status=400
             )
 
@@ -870,23 +768,11 @@ class AuthRegisterView(APIView):
                     status=400
                 )
 
-            semestre = request.data.get('semestre')
-            if semestre in (None, ''):
-                semestre = None
-            else:
-                try:
-                    semestre = int(semestre)
-                except (TypeError, ValueError):
-                    return Response(
-                        {'erro': 'Semestre deve ser um numero inteiro.'},
-                        status=400,
-                    )
-
-                if semestre < 1:
-                    return Response(
-                        {'erro': 'Semestre deve ser maior ou igual a 1.'},
-                        status=400,
-                    )
+            semestre, erro_semestre = normalizar_semestre(
+                request.data.get('semestre')
+            )
+            if erro_semestre:
+                return erro_validacao(erro_semestre)
         else:
             if not request.data.get('cargo') or not request.data.get('setor'):
                 return Response(
@@ -894,21 +780,19 @@ class AuthRegisterView(APIView):
                     status=400
                 )
 
-        senha_hash = make_password(senha)
-
         try:
             with transaction.atomic():
                 with connection.cursor() as cursor:
-                    cursor.execute(
-                        '''
-                        INSERT INTO usuario (nome, email, endereco, status, senha_hash)
-                        VALUES (%s, %s, %s, %s, %s)
-                        RETURNING id_usuario, nome, email, endereco, status;
-                        ''',
-                        [nome, email, endereco, status_usuario, senha_hash]
+                    usuario = criar_usuario_com_senha(
+                        cursor,
+                        nome,
+                        email,
+                        endereco,
+                        status_usuario,
+                        senha,
+                        retornar_dados=True,
                     )
 
-                    usuario = dictfetchone(cursor)
                     usuario['perfil'] = perfil
 
                     if perfil == 'aluno':
@@ -1006,40 +890,18 @@ class AuthLoginView(APIView):
                 )
 
             with connection.cursor() as cursor:
-                cursor.execute(
-                    '''
-                    SELECT 1
-                    FROM aluno
-                    WHERE id_usuario = %s;
-                    ''',
-                    [usuario['id_usuario']]
+                perfil, erro_perfil = obter_perfil_usuario(
+                    cursor,
+                    usuario['id_usuario'],
                 )
-                possui_perfil_aluno = cursor.fetchone() is not None
 
-                cursor.execute(
-                    '''
-                    SELECT 1
-                    FROM funcionario
-                    WHERE id_usuario = %s;
-                    ''',
-                    [usuario['id_usuario']]
-                )
-                possui_perfil_funcionario = cursor.fetchone() is not None
-
-            # O modelo exige especializacao exclusiva; se o banco estiver
-            # inconsistente, o login deve falhar em vez de assumir um perfil.
-            if possui_perfil_aluno and possui_perfil_funcionario:
+            if erro_perfil:
                 return Response(
-                    {'erro': 'Usuario possui perfis conflitantes.'},
+                    {'erro': erro_perfil},
                     status=409
                 )
 
-            if possui_perfil_aluno:
-                usuario['perfil'] = 'aluno'
-            elif possui_perfil_funcionario:
-                usuario['perfil'] = 'funcionario'
-            else:
-                usuario['perfil'] = 'nenhum'
+            usuario['perfil'] = perfil
 
             usuario.pop('senha_hash', None)
 
