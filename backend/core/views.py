@@ -764,11 +764,10 @@ class TesteErroIntegridadeView(APIView):
         
 class AuthRegisterView(APIView):
     def post(self, request):
-        nome = request.data.get('nome')
+        nome = request.data.get('nome') or request.data.get('name') or request.data.get('username')
         email = request.data.get('email')
-        senha = request.data.get('senha')
-        perfil = request.data.get('perfil')
-        endereco = request.data.get('endereco')
+        senha = request.data.get('senha') or request.data.get('password')
+        endereco = request.data.get('endereco') or request.data.get('address')
         status_usuario = request.data.get('status', 'ATIVO')
 
         if not nome or not email or not senha or not perfil:
@@ -875,8 +874,8 @@ class AuthRegisterView(APIView):
         
 class AuthLoginView(APIView):
     def post(self, request):
-        email = request.data.get('email')
-        senha = request.data.get('senha')
+        email = request.data.get('email') or request.data.get('username')
+        senha = request.data.get('senha') or request.data.get('password')
 
         if not email or not senha:
             return Response(
