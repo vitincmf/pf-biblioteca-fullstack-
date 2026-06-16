@@ -5,13 +5,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .db import dictfetchone, run_select
-from .responses import erro_banco, erro_conflito, erro_validacao
+from .responses import erro_banco, erro_conflito, erro_permissao, erro_validacao
 from .services.emprestimos_queries import (
     buscar_detalhe_emprestimo,
     buscar_historico_por_aluno,
 )
 from .services.usuarios import (
     criar_usuario_com_senha,
+    obter_funcionario_ativo_da_requisicao,
     obter_perfil_usuario,
     validar_senha,
 )
@@ -85,6 +86,10 @@ class LivroListCreateView(APIView):
 
     def post(self, request):
         try:
+            funcionario, erro = obter_funcionario_ativo_da_requisicao(request)
+            if erro:
+                return erro
+
             with connection.cursor() as cursor:
                 cursor.execute(
                     '''
@@ -144,6 +149,14 @@ class LivroDetailView(APIView):
         return Response(livro)
 
     def patch(self, request, id_livro):
+        try:
+            funcionario, erro = obter_funcionario_ativo_da_requisicao(request)
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+        if erro:
+            return erro
+
         campos = []
         valores = []
         permitidos = ['titulo', 'autor', 'editora', 'ano_publicacao', 'id_categoria']
@@ -180,6 +193,10 @@ class LivroDetailView(APIView):
 
     def delete(self, request, id_livro):
         try:
+            funcionario, erro = obter_funcionario_ativo_da_requisicao(request)
+            if erro:
+                return erro
+
             with connection.cursor() as cursor:
                 cursor.execute(
                     'DELETE FROM livro WHERE id_livro = %s RETURNING id_livro;',
@@ -266,7 +283,7 @@ class FuncionarioListCreateView(APIView):
         dados = run_select(
             '''
             SELECT u.id_usuario, u.nome, u.email, u.endereco, u.status,
-                   f.cargo, f.setor, f.salario, f.observacao
+                   f.cargo, f.setor, f.observacao
             FROM funcionario f
             JOIN usuario u ON u.id_usuario = f.id_usuario
             ORDER BY u.nome;
@@ -332,6 +349,16 @@ class EmprestimoListCreateView(APIView):
         return Response(dados)
 
     def post(self, request):
+        try:
+            funcionario_autenticado, erro = obter_funcionario_ativo_da_requisicao(
+                request
+            )
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+        if erro:
+            return erro
+
         alunos, erro_alunos = normalizar_lista_ids(
             request.data.get('alunos'),
             'alunos',
@@ -341,6 +368,7 @@ class EmprestimoListCreateView(APIView):
             'livros',
         )
         id_funcionario = request.data.get('id_funcionario')
+        id_funcionario_autenticado = funcionario_autenticado['id_usuario']
 
         if erro_alunos:
             return erro_validacao(erro_alunos)
@@ -351,16 +379,21 @@ class EmprestimoListCreateView(APIView):
         if erro_livros:
             return erro_validacao(erro_livros)
 
-        if not id_funcionario:
-            return erro_validacao('Informe id_funcionario.')
+        if id_funcionario in (None, ''):
+            id_funcionario = id_funcionario_autenticado
+        else:
+            try:
+                id_funcionario = int(id_funcionario)
+            except (TypeError, ValueError):
+                return erro_validacao('id_funcionario deve ser numerico.')
 
-        try:
-            id_funcionario = int(id_funcionario)
-        except (TypeError, ValueError):
-            return erro_validacao('id_funcionario deve ser numerico.')
+            if id_funcionario <= 0:
+                return erro_validacao('id_funcionario deve ser positivo.')
 
-        if id_funcionario <= 0:
-            return erro_validacao('id_funcionario deve ser positivo.')
+            if id_funcionario != id_funcionario_autenticado:
+                return erro_permissao(
+                    'Funcionario informado nao corresponde ao usuario autenticado.'
+                )
 
         data_emprestimo, erro_data_emprestimo = normalizar_data_iso(
             request.data.get('data_emprestimo'),
@@ -651,13 +684,20 @@ class EmprestimoDevolverView(APIView):
 
 class HistoricoEmprestimosView(APIView):
     def get(self, request):
-        dados = run_select(
-            '''
-            SELECT *
-            FROM vw_historico_emprestimos
-            ORDER BY id_emprestimo, nome_aluno, titulo_livro;
-            '''
-        )
+        try:
+            funcionario, erro = obter_funcionario_ativo_da_requisicao(request)
+            if erro:
+                return erro
+
+            dados = run_select(
+                '''
+                SELECT *
+                FROM vw_historico_emprestimos
+                ORDER BY id_emprestimo, nome_aluno, titulo_livro;
+                '''
+            )
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
 
         return Response(dados)
 
