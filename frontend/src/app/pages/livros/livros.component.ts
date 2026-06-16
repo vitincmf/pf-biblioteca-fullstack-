@@ -120,6 +120,11 @@ export class LivrosComponent implements OnInit {
   }
 
   tratarErro(error: HttpErrorResponse) {
+    if (error.status === 0) {
+      this.erro = 'Nao foi possivel conectar ao backend. Verifique se o Django esta rodando e se o CORS permite o header X-Usuario-Id.';
+      return;
+    }
+
     this.erro = error.error?.erro || JSON.stringify(error.error || error.message);
   }
 }
