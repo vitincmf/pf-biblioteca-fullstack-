@@ -6,6 +6,10 @@ from rest_framework.views import APIView
 
 from .db import dictfetchone, run_select
 from .responses import erro_banco, erro_conflito, erro_validacao
+from .services.emprestimos_queries import (
+    buscar_detalhe_emprestimo,
+    buscar_historico_por_aluno,
+)
 from .services.usuarios import (
     criar_usuario_com_senha,
     obter_perfil_usuario,
@@ -554,6 +558,20 @@ class EmprestimoListCreateView(APIView):
             return erro_banco(exc)
 
 
+class EmprestimoDetailView(APIView):
+    def get(self, request, id_emprestimo):
+        try:
+            with connection.cursor() as cursor:
+                emprestimo = buscar_detalhe_emprestimo(cursor, id_emprestimo)
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+        if not emprestimo:
+            return Response({'erro': 'Emprestimo nao encontrado.'}, status=404)
+
+        return Response(emprestimo)
+
+
 class EmprestimoDevolverView(APIView):
     def post(self, request, id_emprestimo):
         data_devolucao_real = request.data.get('data_devolucao_real') or None
@@ -642,6 +660,20 @@ class HistoricoEmprestimosView(APIView):
         )
 
         return Response(dados)
+
+
+class AlunoHistoricoEmprestimosView(APIView):
+    def get(self, request, id_aluno):
+        try:
+            with connection.cursor() as cursor:
+                historico = buscar_historico_por_aluno(cursor, id_aluno)
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+        if not historico:
+            return Response({'erro': 'Aluno nao encontrado.'}, status=404)
+
+        return Response(historico)
 
 
 class LivrosPorCategoriaView(APIView):
