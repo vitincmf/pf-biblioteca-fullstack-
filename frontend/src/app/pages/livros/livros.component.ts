@@ -14,6 +14,12 @@ import { ApiService } from '../../api.service';
       <p class="muted">Consulte o acervo e, se estiver logado como funcionario, cadastre, edite ou remova livros.</p>
       <div class="toolbar">
         <input [(ngModel)]="busca" placeholder="Buscar por titulo">
+        <select [(ngModel)]="categoriaFiltro">
+          <option [ngValue]="null">Todas as categorias</option>
+          <option *ngFor="let categoria of categorias" [ngValue]="categoria.id_categoria">
+            {{ categoria.nome }}
+          </option>
+        </select>
         <button (click)="carregarLivros()">Buscar</button>
       </div>
 
@@ -60,27 +66,35 @@ import { ApiService } from '../../api.service';
       <p *ngIf="erro" class="error">{{ erro }}</p>
       <p *ngIf="carregando" class="loading">Carregando...</p>
 
-      <table *ngIf="livros.length">
-        <thead>
-          <tr>
-            <th>ID</th><th>Titulo</th><th>Autor</th><th>Editora</th><th>Ano</th><th>Categoria</th><th *ngIf="ehFuncionario">Acoes</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let livro of livros">
-            <td>{{ livro.id_livro }}</td>
-            <td>{{ livro.titulo }}</td>
-            <td>{{ livro.autor }}</td>
-            <td>{{ livro.editora }}</td>
-            <td>{{ livro.ano_publicacao }}</td>
-            <td>{{ livro.categoria }}</td>
-            <td *ngIf="ehFuncionario">
-              <button class="secondary" (click)="prepararEdicao(livro)">Editar</button>
-              <button class="danger" (click)="removerLivro(livro.id_livro)">Remover</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-scroll books-table-container" *ngIf="livrosFiltrados.length">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Titulo</th><th>Autor</th><th>Editora</th><th>Ano</th><th>Categoria</th><th>Disponibilidade</th><th *ngIf="ehFuncionario">Acoes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let livro of livrosFiltrados">
+              <td>{{ livro.id_livro }}</td>
+              <td>{{ livro.titulo }}</td>
+              <td>{{ livro.autor }}</td>
+              <td>{{ livro.editora }}</td>
+              <td>{{ livro.ano_publicacao }}</td>
+              <td>{{ livro.categoria }}</td>
+              <td>
+                <span class="status-badge" [class.available]="livro.disponivel" [class.unavailable]="!livro.disponivel">
+                  {{ livro.disponivel ? 'Disponivel' : 'Indisponivel' }}
+                </span>
+              </td>
+              <td *ngIf="ehFuncionario">
+                <button class="secondary" (click)="prepararEdicao(livro)">Editar</button>
+                <button class="danger" (click)="removerLivro(livro.id_livro)">Remover</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p *ngIf="!livrosFiltrados.length && !carregando">Nenhum livro encontrado.</p>
     </section>
   `
 })
@@ -88,6 +102,7 @@ export class LivrosComponent implements OnInit {
   livros: any[] = [];
   categorias: any[] = [];
   busca = '';
+  categoriaFiltro: number | null = null;
   mensagem = '';
   erro = '';
   carregando = false;
@@ -109,6 +124,16 @@ export class LivrosComponent implements OnInit {
   };
 
   constructor(private api: ApiService) {}
+
+  get livrosFiltrados() {
+    if (!this.categoriaFiltro) {
+      return this.livros;
+    }
+
+    return this.livros.filter(
+      (livro) => Number(livro.id_categoria) === Number(this.categoriaFiltro)
+    );
+  }
 
   ngOnInit() {
     this.ehFuncionario = this.api.obterPerfil() === 'funcionario';
