@@ -67,6 +67,60 @@ class CategoriaListCreateView(APIView):
             return erro_banco(exc)
 
 
+class CategoriaDetailView(APIView):
+    def delete(self, request, id_categoria):
+        try:
+            funcionario, erro = obter_funcionario_ativo_da_requisicao(request)
+            if erro:
+                return erro
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    SELECT 1
+                    FROM livro
+                    WHERE id_categoria = %s
+                    LIMIT 1;
+                    ''',
+                    [id_categoria],
+                )
+
+                if cursor.fetchone():
+                    return erro_conflito(
+                        {
+                            'erro': 'Nao foi possivel remover a categoria porque existem livros vinculados a ela.'
+                        }
+                    )
+
+                cursor.execute(
+                    '''
+                    DELETE FROM categoria
+                    WHERE id_categoria = %s
+                    RETURNING id_categoria;
+                    ''',
+                    [id_categoria],
+                )
+                categoria = cursor.fetchone()
+        except IntegrityError:
+            return erro_conflito(
+                {
+                    'erro': 'Nao foi possivel remover a categoria porque existem livros vinculados a ela.'
+                }
+            )
+        except DatabaseError as exc:
+            return erro_banco(exc)
+
+        if not categoria:
+            return Response({'erro': 'Categoria nao encontrada.'}, status=404)
+
+        return Response(
+            {
+                'mensagem': 'Categoria removida com sucesso.',
+                'id_categoria': id_categoria,
+            }
+        )
+
+
 class LivroListCreateView(APIView):
     def get(self, request):
         q = request.query_params.get('q', '').strip()
@@ -1112,9 +1166,27 @@ class HistoricoEmprestimosView(APIView):
 
             dados = run_select(
                 '''
-                SELECT *
-                FROM vw_historico_emprestimos
-                ORDER BY id_emprestimo, nome_aluno, titulo_livro;
+                SELECT e.id_emprestimo,
+                       ua.nome AS nome_aluno,
+                       a.matricula,
+                       l.titulo AS titulo_livro,
+                       c.nome AS categoria,
+                       uf.nome AS nome_funcionario,
+                       e.data_emprestimo,
+                       e.data_devolucao,
+                       e.data_devolucao_real,
+                       e.status,
+                       e.multa
+                FROM emprestimo e
+                JOIN realiza_emprestimo re ON re.id_emprestimo = e.id_emprestimo
+                JOIN aluno a ON a.id_usuario = re.id_aluno
+                JOIN usuario ua ON ua.id_usuario = a.id_usuario
+                JOIN registra_item ri ON ri.id_emprestimo = e.id_emprestimo
+                JOIN livro l ON l.id_livro = ri.id_livro
+                JOIN categoria c ON c.id_categoria = l.id_categoria
+                JOIN funcionario f ON f.id_usuario = ri.id_funcionario
+                JOIN usuario uf ON uf.id_usuario = f.id_usuario
+                ORDER BY e.id_emprestimo DESC, ua.nome, l.titulo;
                 '''
             )
         except (IntegrityError, DatabaseError) as exc:

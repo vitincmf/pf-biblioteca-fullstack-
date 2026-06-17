@@ -11,6 +11,7 @@ urlpatterns = [
     path('auth/login/', views.AuthLoginView.as_view()),
 
     path('categorias/', views.CategoriaListCreateView.as_view()),
+    path('categorias/<int:id_categoria>/', views.CategoriaDetailView.as_view()),
 
     path('livros/', views.LivroListCreateView.as_view()),
     path('livros/<int:id_livro>/', views.LivroDetailView.as_view()),

@@ -41,31 +41,12 @@ import { ApiService } from '../../api.service';
 
       <p *ngIf="mensagem" class="notice">{{ mensagem }}</p>
       <p *ngIf="erro" class="error">{{ erro }}</p>
-
-      <table *ngIf="emprestimos.length">
-        <thead>
-          <tr>
-            <th>ID</th><th>Emprestimo</th><th>Devolucao</th><th>Devolucao real</th><th>Status</th><th>Multa</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let emprestimo of emprestimos">
-            <td>{{ emprestimo.id_emprestimo }}</td>
-            <td>{{ emprestimo.data_emprestimo }}</td>
-            <td>{{ emprestimo.data_devolucao }}</td>
-            <td>{{ emprestimo.data_devolucao_real || '-' }}</td>
-            <td>{{ emprestimo.status }}</td>
-            <td>{{ emprestimo.multa }}</td>
-          </tr>
-        </tbody>
-      </table>
     </section>
   `
 })
 export class EmprestimosComponent implements OnInit {
   alunos: any[] = [];
   livros: any[] = [];
-  emprestimos: any[] = [];
   mensagem = '';
   erro = '';
   form: any = {
@@ -99,15 +80,6 @@ export class EmprestimosComponent implements OnInit {
       },
       error: (error) => this.tratarErro(error)
     });
-
-    this.carregarEmprestimos();
-  }
-
-  carregarEmprestimos() {
-    this.api.listarEmprestimos().subscribe({
-      next: (dados) => this.emprestimos = dados,
-      error: (error) => this.tratarErro(error)
-    });
   }
 
   criarEmprestimo() {
@@ -126,7 +98,6 @@ export class EmprestimosComponent implements OnInit {
     this.api.criarEmprestimo(payload).subscribe({
       next: () => {
         this.mensagem = 'Emprestimo criado com funcionario autenticado pelo header.';
-        this.carregarEmprestimos();
       },
       error: (error) => this.tratarErro(error)
     });

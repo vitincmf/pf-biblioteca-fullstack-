@@ -99,6 +99,13 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/categorias/`, payload);
   }
 
+  removerCategoria(id: number) {
+    return this.http.delete(
+      `${this.baseUrl}/categorias/${id}/`,
+      this.authOptions()
+    );
+  }
+
   listarLivros(q = '') {
     let params = new HttpParams();
     if (q) params = params.set('q', q);

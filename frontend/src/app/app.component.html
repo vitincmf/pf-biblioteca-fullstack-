@@ -12,8 +12,11 @@
     <a routerLink="/aluno/historico" *ngIf="usuario?.perfil === 'aluno'">Historico</a>
     <a routerLink="/aluno/perfil" *ngIf="usuario?.perfil === 'aluno'">Perfil</a>
     <a routerLink="/funcionario/dashboard" *ngIf="usuario?.perfil === 'funcionario'">Funcionario</a>
-    <a routerLink="/livros" *ngIf="usuario?.perfil === 'funcionario'">Livros</a>
-    <a routerLink="/historico" *ngIf="usuario?.perfil === 'funcionario'">Historico</a>
+    <a routerLink="/funcionario/livros" *ngIf="usuario?.perfil === 'funcionario'">Livros</a>
+    <a routerLink="/funcionario/categorias" *ngIf="usuario?.perfil === 'funcionario'">Categorias</a>
+    <a routerLink="/funcionario/emprestimos" *ngIf="usuario?.perfil === 'funcionario'">Emprestimos</a>
+    <a routerLink="/funcionario/relatorio" *ngIf="usuario?.perfil === 'funcionario'">Relatorio</a>
+    <a routerLink="/funcionario/perfil" *ngIf="usuario?.perfil === 'funcionario'">Perfil</a>
     <button type="button" class="secondary" *ngIf="usuario" (click)="logout()">Sair</button>
   </nav>
 </header>
