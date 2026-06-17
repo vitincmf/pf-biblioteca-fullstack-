@@ -18,6 +18,7 @@ urlpatterns = [
     path('livros/buscar/', views.LivroBuscaView.as_view()),
 
     path('alunos/', views.AlunoListCreateView.as_view()),
+    path('alunos/validar/', views.AlunoValidarView.as_view()),
     path('alunos/<int:id_usuario>/', views.AlunoDetailView.as_view()),
     path('alunos/<int:id_aluno>/historico/', views.AlunoHistoricoEmprestimosView.as_view()),
     path('alunos/<int:id_aluno>/relatorios/emprestimos-por-status/', views.AlunoEmprestimosPorStatusView.as_view()),

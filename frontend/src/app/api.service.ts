@@ -138,6 +138,16 @@ export class ApiService {
     return this.http.get<any[]>(`${this.baseUrl}/alunos/`);
   }
 
+  validarAlunoPorEmailMatricula(email: string, matricula: string) {
+    const params = new HttpParams()
+      .set('email', email)
+      .set('matricula', matricula);
+    return this.http.get<any>(
+      `${this.baseUrl}/alunos/validar/`,
+      { ...this.authOptions(), params }
+    );
+  }
+
   detalheAluno(idUsuario: number) {
     return this.http.get<any>(`${this.baseUrl}/alunos/${idUsuario}/`);
   }
@@ -196,8 +206,19 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/emprestimos/${id}/`);
   }
 
+  devolverEmprestimo(idEmprestimo: number, payload: any) {
+    return this.http.post<any>(
+      `${this.baseUrl}/emprestimos/${idEmprestimo}/devolver/`,
+      payload,
+      this.authOptions()
+    );
+  }
+
   historicoAluno(idAluno: number) {
-    return this.http.get<any>(`${this.baseUrl}/alunos/${idAluno}/historico/`);
+    return this.http.get<any>(
+      `${this.baseUrl}/alunos/${idAluno}/historico/`,
+      this.authOptions()
+    );
   }
 
   emprestimosPorStatusAluno(idAluno: number) {

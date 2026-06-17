@@ -468,6 +468,48 @@ class AlunoListCreateView(APIView):
             return erro_banco(exc)
 
 
+class AlunoValidarView(APIView):
+    def get(self, request):
+        try:
+            funcionario, erro = obter_funcionario_ativo_da_requisicao(request)
+            if erro:
+                return erro
+
+            email = str(request.query_params.get('email') or '').strip()
+            matricula = str(request.query_params.get('matricula') or '').strip()
+
+            if not email or not matricula:
+                return erro_validacao('Informe email e matricula do aluno.')
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    SELECT u.id_usuario, u.nome, u.email, u.endereco, u.status,
+                           a.matricula, a.curso, a.semestre, a.observacao
+                    FROM aluno a
+                    JOIN usuario u ON u.id_usuario = a.id_usuario
+                    WHERE LOWER(u.email) = LOWER(%s)
+                      AND a.matricula = %s;
+                    ''',
+                    [email, matricula],
+                )
+                aluno = dictfetchone(cursor)
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+        if not aluno:
+            return Response(
+                {'erro': 'Aluno nao encontrado com o email e matricula informados.'},
+                status=404,
+            )
+
+        if not status_ativo(aluno['status']):
+            return erro_validacao('Aluno inativo nao pode realizar emprestimo.')
+
+        aluno['status'] = str(aluno['status']).strip().upper()
+        return Response({'aluno': aluno})
+
+
 class AlunoDetailView(APIView):
     def get(self, request, id_usuario):
         with connection.cursor() as cursor:
@@ -916,7 +958,7 @@ class EmprestimoListCreateView(APIView):
                             status=404,
                         )
 
-                    if aluno['status'] != 'ATIVO':
+                    if not status_ativo(aluno['status']):
                         return erro_validacao(
                             'Aluno inativo nao pode realizar emprestimo.'
                         )
@@ -938,7 +980,7 @@ class EmprestimoListCreateView(APIView):
                             status=404,
                         )
 
-                    if funcionario['status'] != 'ATIVO':
+                    if not status_ativo(funcionario['status']):
                         return erro_validacao(
                             'Funcionario inativo nao pode registrar emprestimo.'
                         )
@@ -1082,11 +1124,31 @@ class EmprestimoDetailView(APIView):
 
 class EmprestimoDevolverView(APIView):
     def post(self, request, id_emprestimo):
+        try:
+            funcionario, erro = obter_funcionario_ativo_da_requisicao(request)
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+        if erro:
+            return erro
+
         data_devolucao_real = request.data.get('data_devolucao_real') or None
+        id_aluno = request.data.get('id_aluno')
         multa, erro_multa = normalizar_multa(request.data.get('multa'))
 
         if erro_multa:
             return erro_validacao(erro_multa)
+
+        if id_aluno in (None, ''):
+            return erro_validacao('Informe o aluno validado para devolucao.')
+
+        try:
+            id_aluno = int(id_aluno)
+        except (TypeError, ValueError):
+            return erro_validacao('id_aluno deve ser numerico.')
+
+        if id_aluno <= 0:
+            return erro_validacao('id_aluno deve ser positivo.')
 
         try:
             with transaction.atomic():
@@ -1108,14 +1170,36 @@ class EmprestimoDevolverView(APIView):
                             status=404,
                         )
 
-                    if emprestimo['status'] == 'DEVOLVIDO':
+                    cursor.execute(
+                        '''
+                        SELECT 1
+                        FROM realiza_emprestimo
+                        WHERE id_emprestimo = %s
+                          AND id_aluno = %s;
+                        ''',
+                        [id_emprestimo, id_aluno],
+                    )
+
+                    if not cursor.fetchone():
+                        return erro_permissao(
+                            'Emprestimo nao pertence ao aluno validado.'
+                        )
+
+                    status_emprestimo = str(emprestimo['status'] or '').strip().upper()
+
+                    if status_emprestimo == 'DEVOLVIDO':
                         return erro_conflito(
                             {'erro': 'Emprestimo ja foi devolvido.'}
                         )
 
-                    if emprestimo['status'] == 'CANCELADO':
+                    if status_emprestimo == 'CANCELADO':
                         return erro_conflito(
                             {'erro': 'Emprestimo cancelado nao pode ser devolvido.'}
+                        )
+
+                    if status_emprestimo != 'ATIVO':
+                        return erro_conflito(
+                            {'erro': 'Apenas emprestimo ATIVO pode ser devolvido.'}
                         )
 
                     cursor.execute(
