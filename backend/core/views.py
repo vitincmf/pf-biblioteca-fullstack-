@@ -73,7 +73,14 @@ class LivroListCreateView(APIView):
             termo = f'%{q}%'
             dados = run_select(
                 '''
-                SELECT l.*, c.nome AS categoria
+                SELECT l.*, c.nome AS categoria,
+                       NOT EXISTS (
+                           SELECT 1
+                           FROM registra_item ri
+                           JOIN emprestimo e ON e.id_emprestimo = ri.id_emprestimo
+                           WHERE ri.id_livro = l.id_livro
+                             AND e.status = 'ATIVO'
+                       ) AS disponivel
                 FROM livro l
                 JOIN categoria c ON c.id_categoria = l.id_categoria
                 WHERE LOWER(l.titulo) LIKE LOWER(%s)
@@ -84,7 +91,14 @@ class LivroListCreateView(APIView):
         else:
             dados = run_select(
                 '''
-                SELECT l.*, c.nome AS categoria
+                SELECT l.*, c.nome AS categoria,
+                       NOT EXISTS (
+                           SELECT 1
+                           FROM registra_item ri
+                           JOIN emprestimo e ON e.id_emprestimo = ri.id_emprestimo
+                           WHERE ri.id_livro = l.id_livro
+                             AND e.status = 'ATIVO'
+                       ) AS disponivel
                 FROM livro l
                 JOIN categoria c ON c.id_categoria = l.id_categoria
                 ORDER BY l.id_livro;
@@ -160,7 +174,14 @@ class LivroBuscaView(APIView):
 
         dados = run_select(
             '''
-            SELECT l.*, c.nome AS categoria
+            SELECT l.*, c.nome AS categoria,
+                   NOT EXISTS (
+                       SELECT 1
+                       FROM registra_item ri
+                       JOIN emprestimo e ON e.id_emprestimo = ri.id_emprestimo
+                       WHERE ri.id_livro = l.id_livro
+                         AND e.status = 'ATIVO'
+                   ) AS disponivel
             FROM livro l
             JOIN categoria c ON c.id_categoria = l.id_categoria
             WHERE LOWER(l.titulo) LIKE LOWER(%s)
@@ -177,7 +198,14 @@ class LivroDetailView(APIView):
         with connection.cursor() as cursor:
             cursor.execute(
                 '''
-                SELECT l.*, c.nome AS categoria
+                SELECT l.*, c.nome AS categoria,
+                       NOT EXISTS (
+                           SELECT 1
+                           FROM registra_item ri
+                           JOIN emprestimo e ON e.id_emprestimo = ri.id_emprestimo
+                           WHERE ri.id_livro = l.id_livro
+                             AND e.status = 'ATIVO'
+                       ) AS disponivel
                 FROM livro l
                 JOIN categoria c ON c.id_categoria = l.id_categoria
                 WHERE l.id_livro = %s;

@@ -8,9 +8,12 @@
     <a routerLink="/login" *ngIf="!usuario">Login</a>
     <a routerLink="/cadastro" *ngIf="!usuario">Cadastro</a>
     <a routerLink="/aluno/dashboard" *ngIf="usuario?.perfil === 'aluno'">Aluno</a>
+    <a routerLink="/aluno/livros" *ngIf="usuario?.perfil === 'aluno'">Livros</a>
+    <a routerLink="/aluno/historico" *ngIf="usuario?.perfil === 'aluno'">Historico</a>
+    <a routerLink="/aluno/perfil" *ngIf="usuario?.perfil === 'aluno'">Perfil</a>
     <a routerLink="/funcionario/dashboard" *ngIf="usuario?.perfil === 'funcionario'">Funcionario</a>
-    <a routerLink="/livros" *ngIf="usuario">Livros</a>
-    <a routerLink="/historico" *ngIf="usuario">Historico</a>
+    <a routerLink="/livros" *ngIf="usuario?.perfil === 'funcionario'">Livros</a>
+    <a routerLink="/historico" *ngIf="usuario?.perfil === 'funcionario'">Historico</a>
     <button type="button" class="secondary" *ngIf="usuario" (click)="logout()">Sair</button>
   </nav>
 </header>

@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './auth.guard';
 import { AlunoDashboardComponent } from './pages/aluno-dashboard/aluno-dashboard.component';
+import { AlunoPerfilComponent } from './pages/aluno-perfil/aluno-perfil.component';
 import { CadastroComponent } from './pages/cadastro/cadastro.component';
 import { EmprestimosComponent } from './pages/emprestimos/emprestimos.component';
 import { FuncionarioDashboardComponent } from './pages/funcionario-dashboard/funcionario-dashboard.component';
@@ -14,6 +15,24 @@ export const routes: Routes = [
   {
     path: 'aluno/dashboard',
     component: AlunoDashboardComponent,
+    canActivate: [authGuard],
+    data: { perfil: 'aluno' }
+  },
+  {
+    path: 'aluno/perfil',
+    component: AlunoPerfilComponent,
+    canActivate: [authGuard],
+    data: { perfil: 'aluno' }
+  },
+  {
+    path: 'aluno/livros',
+    component: LivrosComponent,
+    canActivate: [authGuard],
+    data: { perfil: 'aluno' }
+  },
+  {
+    path: 'aluno/historico',
+    component: HistoricoComponent,
     canActivate: [authGuard],
     data: { perfil: 'aluno' }
   },

@@ -123,6 +123,32 @@ h3 {
   margin-top: 14px;
 }
 
+.shortcut-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.shortcut-grid a {
+  background: #f8fafc;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  color: #172033;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.shortcut-grid a:hover {
+  border-color: #2563eb;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.1);
+}
+
+.shortcut-grid span {
+  color: #64748b;
+  font-weight: 400;
+}
+
 label {
   display: grid;
   gap: 5px;
@@ -184,6 +210,20 @@ table {
   border-collapse: collapse;
   margin-top: 14px;
   width: 100%;
+}
+
+.table-scroll {
+  overflow: auto;
+}
+
+.books-table-container {
+  max-height: 520px;
+}
+
+.books-table-container thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 th,
@@ -253,6 +293,24 @@ tbody tr:hover {
 .badge.danger {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.status-badge {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+}
+
+.status-badge.available {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-badge.unavailable {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .color-dot {
