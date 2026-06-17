@@ -27,7 +27,7 @@ import { ApiService } from '../../api.service';
         <label>Status <input [(ngModel)]="form.status"></label>
 
         <ng-container *ngIf="form.perfil === 'aluno'">
-          <label>Matricula <input [(ngModel)]="form.matricula"></label>
+          <label>Matricula <input required [(ngModel)]="form.matricula"></label>
           <label>Curso <input [(ngModel)]="form.curso"></label>
           <label>Semestre <input type="number" min="1" [(ngModel)]="form.semestre"></label>
         </ng-container>
@@ -83,10 +83,15 @@ export class CadastroComponent {
       observacao: this.form.observacao
     };
 
+    if (this.form.perfil === 'aluno' && !String(this.form.matricula || '').trim()) {
+      this.erro = 'Matricula e obrigatoria para cadastro de aluno.';
+      return;
+    }
+
     const payload = this.form.perfil === 'aluno'
       ? {
           ...comum,
-          matricula: this.form.matricula,
+          matricula: String(this.form.matricula).trim(),
           curso: this.form.curso,
           semestre: this.form.semestre
         }
