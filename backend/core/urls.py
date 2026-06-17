@@ -17,8 +17,11 @@ urlpatterns = [
     path('livros/buscar/', views.LivroBuscaView.as_view()),
 
     path('alunos/', views.AlunoListCreateView.as_view()),
+    path('alunos/<int:id_usuario>/', views.AlunoDetailView.as_view()),
     path('alunos/<int:id_aluno>/historico/', views.AlunoHistoricoEmprestimosView.as_view()),
+    path('alunos/<int:id_aluno>/relatorios/emprestimos-por-status/', views.AlunoEmprestimosPorStatusView.as_view()),
     path('funcionarios/', views.FuncionarioListCreateView.as_view()),
+    path('funcionarios/<int:id_usuario>/', views.FuncionarioDetailView.as_view()),
 
     path('emprestimos/', views.EmprestimoListCreateView.as_view()),
     path('emprestimos/<int:id_emprestimo>/', views.EmprestimoDetailView.as_view()),

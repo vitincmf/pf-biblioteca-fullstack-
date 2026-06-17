@@ -1,6 +1,6 @@
 :root {
   color: #18202f;
-  background: #f4f6f8;
+  background: #eef2f7;
   font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -11,6 +11,7 @@ body {
 header {
   align-items: center;
   background: #172033;
+  border-bottom: 4px solid #2563eb;
   color: #fff;
   display: flex;
   gap: 20px;
@@ -49,16 +50,17 @@ header a {
 
 main {
   margin: 0 auto;
-  max-width: 1180px;
-  padding: 24px;
+  max-width: 1220px;
+  padding: 26px;
 }
 
 section {
   background: #fff;
-  border: 1px solid #dfe5ee;
+  border: 1px solid #d8e0eb;
   border-radius: 8px;
-  margin-bottom: 18px;
-  padding: 18px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+  margin-bottom: 20px;
+  padding: 20px;
 }
 
 h1,
@@ -74,6 +76,7 @@ h3 {
 
 .dashboard-header {
   align-items: center;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   display: flex;
   justify-content: space-between;
 }
@@ -88,6 +91,36 @@ h3 {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.readonly-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-bottom: 16px;
+}
+
+.readonly-grid div {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.readonly-grid span {
+  color: #64748b;
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.report-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-top: 14px;
 }
 
 label {
@@ -112,6 +145,14 @@ button {
   padding: 10px;
 }
 
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+  outline: none;
+}
+
 textarea {
   min-height: 78px;
   resize: vertical;
@@ -123,10 +164,20 @@ button {
   color: #fff;
   cursor: pointer;
   font-weight: 700;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+button:hover {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
 }
 
 button.secondary {
   background: #475569;
+}
+
+button.danger {
+  background: #dc2626;
 }
 
 table {
@@ -144,6 +195,13 @@ td {
 }
 
 th {
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+tbody tr:hover {
   background: #f8fafc;
 }
 
@@ -165,6 +223,15 @@ th {
   background: #fef2f2;
   border: 1px solid #ef4444;
   color: #991b1b;
+}
+
+.muted {
+  color: #64748b;
+}
+
+.loading {
+  color: #475569;
+  font-weight: 700;
 }
 
 .history-item {
