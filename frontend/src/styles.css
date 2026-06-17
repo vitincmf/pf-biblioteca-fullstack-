@@ -226,6 +226,16 @@ table {
   z-index: 1;
 }
 
+.report-table-container {
+  max-height: 560px;
+}
+
+.report-table-container thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 th,
 td {
   border-bottom: 1px solid #e5e7eb;

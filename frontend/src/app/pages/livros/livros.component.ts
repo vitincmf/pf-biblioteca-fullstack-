@@ -96,15 +96,64 @@ import { ApiService } from '../../api.service';
       </div>
       <p *ngIf="!livrosFiltrados.length && !carregando">Nenhum livro encontrado.</p>
     </section>
+
+    <section *ngIf="ehFuncionario">
+      <h2>Relatorios de categorias</h2>
+      <p class="muted">Estes relatorios carregam automaticamente a partir das consultas do backend.</p>
+      <p *ngIf="erroRelatorio" class="error">{{ erroRelatorio }}</p>
+
+      <div class="report-grid">
+        <div>
+          <h3>Livros por categoria</h3>
+          <table *ngIf="livrosPorCategoria.length">
+            <thead>
+              <tr>
+                <th>Categoria</th>
+                <th>Total de livros</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of livrosPorCategoria">
+                <td>{{ item.categoria }}</td>
+                <td>{{ item.quantidade_livros }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p *ngIf="!livrosPorCategoria.length && !erroRelatorio">Nenhum dado encontrado.</p>
+        </div>
+
+        <div>
+          <h3>Categorias com mais de um livro</h3>
+          <table *ngIf="categoriasComMaisDeUmLivro.length">
+            <thead>
+              <tr>
+                <th>Categoria</th>
+                <th>Total de livros</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of categoriasComMaisDeUmLivro">
+                <td>{{ item.categoria }}</td>
+                <td>{{ item.quantidade_livros }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p *ngIf="!categoriasComMaisDeUmLivro.length && !erroRelatorio">Nenhuma categoria com mais de um livro.</p>
+        </div>
+      </div>
+    </section>
   `
 })
 export class LivrosComponent implements OnInit {
   livros: any[] = [];
   categorias: any[] = [];
+  livrosPorCategoria: any[] = [];
+  categoriasComMaisDeUmLivro: any[] = [];
   busca = '';
   categoriaFiltro: number | null = null;
   mensagem = '';
   erro = '';
+  erroRelatorio = '';
   carregando = false;
   ehFuncionario = false;
   novoLivro: any = {
@@ -139,6 +188,9 @@ export class LivrosComponent implements OnInit {
     this.ehFuncionario = this.api.obterPerfil() === 'funcionario';
     this.carregarCategorias();
     this.carregarLivros();
+    if (this.ehFuncionario) {
+      this.carregarRelatorios();
+    }
   }
 
   carregarCategorias() {
@@ -184,6 +236,7 @@ export class LivrosComponent implements OnInit {
           id_categoria: this.categorias[0]?.id_categoria ?? null
         };
         this.carregarLivros();
+        this.carregarRelatorios();
       },
       error: (error) => this.tratarErro(error)
     });
@@ -214,6 +267,7 @@ export class LivrosComponent implements OnInit {
         this.mensagem = 'Livro atualizado com sucesso.';
         this.cancelarEdicao();
         this.carregarLivros();
+        this.carregarRelatorios();
       },
       error: (error) => this.tratarErro(error)
     });
@@ -230,8 +284,23 @@ export class LivrosComponent implements OnInit {
         this.mensagem = 'Livro removido com sucesso.';
         this.cancelarEdicao();
         this.carregarLivros();
+        this.carregarRelatorios();
       },
       error: (error) => this.tratarErro(error)
+    });
+  }
+
+  carregarRelatorios() {
+    this.erroRelatorio = '';
+
+    this.api.livrosPorCategoria().subscribe({
+      next: (dados) => this.livrosPorCategoria = dados,
+      error: (error) => this.tratarErroRelatorio(error)
+    });
+
+    this.api.categoriasComMaisDeUmLivro().subscribe({
+      next: (dados) => this.categoriasComMaisDeUmLivro = dados,
+      error: (error) => this.tratarErroRelatorio(error)
     });
   }
 
@@ -276,5 +345,9 @@ export class LivrosComponent implements OnInit {
     }
 
     this.erro = error.error?.erro || error.error?.detalhes || JSON.stringify(error.error || error.message);
+  }
+
+  tratarErroRelatorio(error: HttpErrorResponse) {
+    this.erroRelatorio = error.error?.erro || JSON.stringify(error.error || error.message);
   }
 }
