@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../api.service';
@@ -28,16 +28,28 @@ import { ApiService } from '../../api.service';
     </section>
   `
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   form = { email: '', senha: '' };
   erro = '';
 
   constructor(private api: ApiService, private router: Router) {}
 
+  ngOnInit() {
+    this.api.logout();
+  }
+
   entrar() {
     this.erro = '';
+    this.api.logout();
+
     this.api.login(this.form).subscribe({
       next: (res) => {
+        if (!this.api.statusAtivo(res.usuario)) {
+          this.api.logout();
+          this.erro = 'Usuario inativo. Login nao permitido.';
+          return;
+        }
+
         this.api.salvarUsuario(res.usuario);
 
         if (res.usuario.perfil === 'aluno') {
@@ -54,6 +66,7 @@ export class LoginComponent {
         this.erro = 'Usuario sem perfil ativo para acessar o sistema.';
       },
       error: (error: HttpErrorResponse) => {
+        this.api.logout();
         this.erro = error.error?.erro || 'Nao foi possivel fazer login.';
       }
     });
