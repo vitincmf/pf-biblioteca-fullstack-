@@ -1,4 +1,5 @@
 from django.contrib.auth.hashers import check_password, make_password
+
 from django.db import DatabaseError, IntegrityError, connection, transaction
 
 from rest_framework.response import Response
@@ -1236,107 +1237,49 @@ class TesteErroIntegridadeView(APIView):
         
 class AuthRegisterView(APIView):
     def post(self, request):
-        nome = request.data.get('nome')
+        nome = (
+            request.data.get('nome')
+            or request.data.get('name')
+            or request.data.get('nomeCompleto')
+            or request.data.get('fullName')
+            or request.data.get('username')
+        )
         email = request.data.get('email')
-        senha = request.data.get('senha')
-        perfil = request.data.get('perfil')
-        endereco = request.data.get('endereco')
+        senha = request.data.get('senha') or request.data.get('password')
+        endereco = request.data.get('endereco') or request.data.get('address')
         status_usuario = request.data.get('status', 'ATIVO')
 
-        if not nome or not email or not senha or not perfil:
+        if not nome or not email or not senha:
             return Response(
-                {'erro': 'Nome, email, senha e perfil sao obrigatorios.'},
+                {'erro': 'Nome, email e senha sao obrigatorios.'},
                 status=400
             )
 
-        if perfil not in ('aluno', 'funcionario'):
+        if len(senha) < 4:
             return Response(
-                {'erro': 'Perfil deve ser aluno ou funcionario.'},
+                {'erro': 'A senha deve ter pelo menos 4 caracteres.'},
                 status=400
             )
 
-        erro_senha = validar_senha(
-            senha,
-            'Nome, email, senha e perfil sao obrigatorios.',
-        )
-        if erro_senha:
-            return Response(
-                {'erro': erro_senha},
-                status=400
-            )
-
-        if perfil == 'aluno':
-            if not request.data.get('matricula') or not request.data.get('curso'):
-                return Response(
-                    {'erro': 'Matricula e curso sao obrigatorios para aluno.'},
-                    status=400
-                )
-
-            semestre, erro_semestre = normalizar_semestre(
-                request.data.get('semestre')
-            )
-            if erro_semestre:
-                return erro_validacao(erro_semestre)
-        else:
-            if not request.data.get('cargo') or not request.data.get('setor'):
-                return Response(
-                    {'erro': 'Cargo e setor sao obrigatorios para funcionario.'},
-                    status=400
-                )
+        senha_hash = make_password(senha)
 
         try:
-            with transaction.atomic():
-                with connection.cursor() as cursor:
-                    usuario = criar_usuario_com_senha(
-                        cursor,
-                        nome,
-                        email,
-                        endereco,
-                        status_usuario,
-                        senha,
-                        retornar_dados=True,
-                    )
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    INSERT INTO usuario (nome, email, endereco, status, senha_hash)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id_usuario, nome, email, endereco, status;
+                    ''',
+                    [nome, email, endereco, status_usuario, senha_hash]
+                )
 
-                    usuario['perfil'] = perfil
-
-                    if perfil == 'aluno':
-                        cursor.execute(
-                            '''
-                            INSERT INTO aluno (id_usuario, matricula, curso, semestre, observacao)
-                            VALUES (%s, %s, %s, %s, %s)
-                            RETURNING *;
-                            ''',
-                            [
-                                usuario['id_usuario'],
-                                request.data.get('matricula'),
-                                request.data.get('curso'),
-                                semestre,
-                                request.data.get('observacao'),
-                            ]
-                        )
-                        perfil_dados = {'aluno': dictfetchone(cursor)}
-                    else:
-                        cursor.execute(
-                            '''
-                            INSERT INTO funcionario (id_usuario, cargo, setor, salario, observacao)
-                            VALUES (%s, %s, %s, %s, %s)
-                            RETURNING *;
-                            ''',
-                            [
-                                usuario['id_usuario'],
-                                request.data.get('cargo'),
-                                request.data.get('setor'),
-                                request.data.get('salario'),
-                                request.data.get('observacao'),
-                            ]
-                        )
-                        perfil_dados = {'funcionario': dictfetchone(cursor)}
+                usuario = dictfetchone(cursor)
 
             return Response(
                 {
                     'mensagem': 'Usuario cadastrado com sucesso.',
-                    'usuario': usuario,
-                    **perfil_dados,
+                    'usuario': usuario
                 },
                 status=201
             )
@@ -1347,8 +1290,8 @@ class AuthRegisterView(APIView):
         
 class AuthLoginView(APIView):
     def post(self, request):
-        email = request.data.get('email')
-        senha = request.data.get('senha')
+        email = request.data.get('email') or request.data.get('username')
+        senha = request.data.get('senha') or request.data.get('password')
 
         if not email or not senha:
             return Response(
