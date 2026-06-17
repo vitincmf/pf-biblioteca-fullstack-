@@ -1,4 +1,4 @@
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.db import DatabaseError, IntegrityError, connection, transaction
 
 from rest_framework.response import Response
@@ -14,6 +14,7 @@ from .services.usuarios import (
     criar_usuario_com_senha,
     obter_funcionario_ativo_da_requisicao,
     obter_perfil_usuario,
+    obter_usuario_autenticado,
     validar_senha,
 )
 from .validators import (
@@ -23,6 +24,14 @@ from .validators import (
     normalizar_multa_criacao,
     normalizar_semestre,
 )
+
+
+def campos_nao_permitidos(payload, permitidos):
+    return sorted(set(payload.keys()) - set(permitidos))
+
+
+def mensagem_campos_nao_permitidos(campos):
+    return f"Campos nao permitidos para edicao da propria conta: {', '.join(campos)}"
 
 
 class HealthView(APIView):
@@ -90,7 +99,41 @@ class LivroListCreateView(APIView):
             if erro:
                 return erro
 
+            titulo = request.data.get('titulo')
+            autor = request.data.get('autor')
+            ano_publicacao = request.data.get('ano_publicacao')
+            id_categoria = request.data.get('id_categoria')
+
+            if titulo in (None, ''):
+                return erro_validacao('titulo nao pode ser vazio.')
+
+            if autor in (None, ''):
+                return erro_validacao('autor nao pode ser vazio.')
+
+            if ano_publicacao in (None, ''):
+                return erro_validacao('ano_publicacao nao pode ser vazio.')
+
+            try:
+                id_categoria = int(id_categoria)
+            except (TypeError, ValueError):
+                return erro_validacao('id_categoria deve ser numerico.')
+
+            if id_categoria <= 0:
+                return erro_validacao('id_categoria deve ser positivo.')
+
             with connection.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    SELECT 1
+                    FROM categoria
+                    WHERE id_categoria = %s;
+                    ''',
+                    [id_categoria],
+                )
+
+                if not cursor.fetchone():
+                    return Response({'erro': 'Categoria nao encontrada.'}, status=404)
+
                 cursor.execute(
                     '''
                     INSERT INTO livro (titulo, autor, editora, ano_publicacao, id_categoria)
@@ -98,11 +141,11 @@ class LivroListCreateView(APIView):
                     RETURNING *;
                     ''',
                     [
-                        request.data.get('titulo'),
-                        request.data.get('autor'),
+                        titulo,
+                        autor,
                         request.data.get('editora'),
-                        request.data.get('ano_publicacao'),
-                        request.data.get('id_categoria'),
+                        ano_publicacao,
+                        id_categoria,
                     ],
                 )
                 return Response(dictfetchone(cursor), status=201)
@@ -160,11 +203,34 @@ class LivroDetailView(APIView):
         campos = []
         valores = []
         permitidos = ['titulo', 'autor', 'editora', 'ano_publicacao', 'id_categoria']
+        extras = sorted(set(request.data.keys()) - set(permitidos))
+
+        if extras:
+            return erro_validacao(
+                f"Campos nao permitidos para edicao de livro: {', '.join(extras)}"
+            )
 
         for campo in permitidos:
             if campo in request.data:
+                valor = request.data.get(campo)
+
+                if campo in ['titulo', 'autor', 'id_categoria'] and valor in (None, ''):
+                    return erro_validacao(f'{campo} nao pode ser vazio.')
+
+                if campo == 'ano_publicacao' and valor in (None, ''):
+                    return erro_validacao('ano_publicacao nao pode ser vazio.')
+
+                if campo == 'id_categoria':
+                    try:
+                        valor = int(valor)
+                    except (TypeError, ValueError):
+                        return erro_validacao('id_categoria deve ser numerico.')
+
+                    if valor <= 0:
+                        return erro_validacao('id_categoria deve ser positivo.')
+
                 campos.append(f'{campo} = %s')
-                valores.append(request.data.get(campo))
+                valores.append(valor)
 
         if not campos:
             return Response({'erro': 'Nenhum campo informado para atualizacao.'}, status=400)
@@ -173,6 +239,22 @@ class LivroDetailView(APIView):
 
         try:
             with connection.cursor() as cursor:
+                if 'id_categoria' in request.data:
+                    cursor.execute(
+                        '''
+                        SELECT 1
+                        FROM categoria
+                        WHERE id_categoria = %s;
+                        ''',
+                        [request.data.get('id_categoria')],
+                    )
+
+                    if not cursor.fetchone():
+                        return Response(
+                            {'erro': 'Categoria nao encontrada.'},
+                            status=404,
+                        )
+
                 cursor.execute(
                     f'''
                     UPDATE livro
@@ -199,11 +281,35 @@ class LivroDetailView(APIView):
 
             with connection.cursor() as cursor:
                 cursor.execute(
+                    '''
+                    SELECT 1
+                    FROM registra_item
+                    WHERE id_livro = %s
+                    LIMIT 1;
+                    ''',
+                    [id_livro],
+                )
+
+                if cursor.fetchone():
+                    return erro_conflito(
+                        {
+                            'erro': 'Nao foi possivel remover o livro porque ele possui historico de emprestimos.'
+                        }
+                    )
+
+            with connection.cursor() as cursor:
+                cursor.execute(
                     'DELETE FROM livro WHERE id_livro = %s RETURNING id_livro;',
                     [id_livro],
                 )
                 apagado = cursor.fetchone()
-        except (IntegrityError, DatabaseError) as exc:
+        except IntegrityError:
+            return erro_conflito(
+                {
+                    'erro': 'Nao foi possivel remover o livro porque ele possui historico de emprestimos.'
+                }
+            )
+        except DatabaseError as exc:
             return erro_banco(exc)
 
         if not apagado:
@@ -278,6 +384,146 @@ class AlunoListCreateView(APIView):
             return erro_banco(exc)
 
 
+class AlunoDetailView(APIView):
+    def get(self, request, id_usuario):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                '''
+                SELECT u.id_usuario, u.nome, u.email, u.endereco, u.status,
+                       a.matricula, a.curso, a.semestre, a.observacao
+                FROM aluno a
+                JOIN usuario u ON u.id_usuario = a.id_usuario
+                WHERE a.id_usuario = %s;
+                ''',
+                [id_usuario],
+            )
+            aluno = dictfetchone(cursor)
+
+        if not aluno:
+            return Response({'erro': 'Registro nao encontrado.'}, status=404)
+
+        return Response(aluno)
+
+    def patch(self, request, id_usuario):
+        usuario_autenticado, erro = obter_usuario_autenticado(request)
+        if erro:
+            return erro
+
+        if usuario_autenticado['id_usuario'] != id_usuario:
+            return erro_permissao('Voce nao tem permissao para alterar esta conta.')
+
+        permitidos = ['nome', 'email', 'endereco', 'senha', 'observacao']
+        proibidos = campos_nao_permitidos(request.data, permitidos)
+        if proibidos:
+            return erro_validacao(mensagem_campos_nao_permitidos(proibidos))
+
+        usuario_campos = []
+        usuario_valores = []
+        aluno_campos = []
+        aluno_valores = []
+
+        for campo in ['nome', 'email', 'endereco']:
+            if campo in request.data:
+                usuario_campos.append(f'{campo} = %s')
+                usuario_valores.append(request.data.get(campo))
+
+        if request.data.get('senha'):
+            usuario_campos.append('senha_hash = %s')
+            usuario_valores.append(make_password(request.data.get('senha')))
+
+        for campo in ['observacao']:
+            if campo in request.data:
+                aluno_campos.append(f'{campo} = %s')
+                aluno_valores.append(request.data.get(campo))
+
+        if not usuario_campos and not aluno_campos:
+            return erro_validacao('Nenhum campo informado para atualizacao.')
+
+        try:
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        '''
+                        SELECT 1
+                        FROM aluno
+                        WHERE id_usuario = %s;
+                        ''',
+                        [id_usuario],
+                    )
+
+                    if not cursor.fetchone():
+                        return Response({'erro': 'Registro nao encontrado.'}, status=404)
+
+                    if usuario_campos:
+                        cursor.execute(
+                            f'''
+                            UPDATE usuario
+                            SET {', '.join(usuario_campos)}
+                            WHERE id_usuario = %s;
+                            ''',
+                            [*usuario_valores, id_usuario],
+                        )
+
+                    if aluno_campos:
+                        cursor.execute(
+                            f'''
+                            UPDATE aluno
+                            SET {', '.join(aluno_campos)}
+                            WHERE id_usuario = %s;
+                            ''',
+                            [*aluno_valores, id_usuario],
+                        )
+
+                    cursor.execute(
+                        '''
+                        SELECT u.id_usuario, u.nome, u.email, u.endereco, u.status,
+                               a.matricula, a.curso, a.semestre, a.observacao
+                        FROM aluno a
+                        JOIN usuario u ON u.id_usuario = a.id_usuario
+                        WHERE a.id_usuario = %s;
+                        ''',
+                        [id_usuario],
+                    )
+                    aluno = dictfetchone(cursor)
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+        return Response({'mensagem': 'Conta atualizada com sucesso.', 'aluno': aluno})
+
+    def delete(self, request, id_usuario):
+        usuario_autenticado, erro = obter_usuario_autenticado(request)
+        if erro:
+            return erro
+
+        if usuario_autenticado['id_usuario'] != id_usuario:
+            return erro_permissao('Voce nao tem permissao para remover esta conta.')
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    UPDATE usuario
+                    SET status = 'INATIVO'
+                    WHERE id_usuario = %s
+                      AND EXISTS (
+                          SELECT 1
+                          FROM aluno
+                          WHERE aluno.id_usuario = usuario.id_usuario
+                      )
+                    RETURNING id_usuario;
+                    ''',
+                    [id_usuario],
+                )
+                aluno = cursor.fetchone()
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+        if not aluno:
+            return Response({'erro': 'Registro nao encontrado.'}, status=404)
+
+        return Response({'mensagem': 'Conta desativada com sucesso.'})
+
+
 class FuncionarioListCreateView(APIView):
     def get(self, request):
         dados = run_select(
@@ -341,6 +587,151 @@ class FuncionarioListCreateView(APIView):
 
         except (IntegrityError, DatabaseError) as exc:
             return erro_banco(exc)
+
+
+class FuncionarioDetailView(APIView):
+    def get(self, request, id_usuario):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                '''
+                SELECT u.id_usuario, u.nome, u.email, u.endereco, u.status,
+                       f.cargo, f.setor, f.observacao
+                FROM funcionario f
+                JOIN usuario u ON u.id_usuario = f.id_usuario
+                WHERE f.id_usuario = %s;
+                ''',
+                [id_usuario],
+            )
+            funcionario = dictfetchone(cursor)
+
+        if not funcionario:
+            return Response({'erro': 'Registro nao encontrado.'}, status=404)
+
+        return Response(funcionario)
+
+    def patch(self, request, id_usuario):
+        usuario_autenticado, erro = obter_usuario_autenticado(request)
+        if erro:
+            return erro
+
+        if usuario_autenticado['id_usuario'] != id_usuario:
+            return erro_permissao('Voce nao tem permissao para alterar esta conta.')
+
+        permitidos = ['nome', 'email', 'endereco', 'senha', 'observacao']
+        proibidos = campos_nao_permitidos(request.data, permitidos)
+        if proibidos:
+            return erro_validacao(mensagem_campos_nao_permitidos(proibidos))
+
+        usuario_campos = []
+        usuario_valores = []
+        funcionario_campos = []
+        funcionario_valores = []
+
+        for campo in ['nome', 'email', 'endereco']:
+            if campo in request.data:
+                usuario_campos.append(f'{campo} = %s')
+                usuario_valores.append(request.data.get(campo))
+
+        if request.data.get('senha'):
+            usuario_campos.append('senha_hash = %s')
+            usuario_valores.append(make_password(request.data.get('senha')))
+
+        for campo in ['observacao']:
+            if campo in request.data:
+                funcionario_campos.append(f'{campo} = %s')
+                funcionario_valores.append(request.data.get(campo))
+
+        if not usuario_campos and not funcionario_campos:
+            return erro_validacao('Nenhum campo informado para atualizacao.')
+
+        try:
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        '''
+                        SELECT 1
+                        FROM funcionario
+                        WHERE id_usuario = %s;
+                        ''',
+                        [id_usuario],
+                    )
+
+                    if not cursor.fetchone():
+                        return Response({'erro': 'Registro nao encontrado.'}, status=404)
+
+                    if usuario_campos:
+                        cursor.execute(
+                            f'''
+                            UPDATE usuario
+                            SET {', '.join(usuario_campos)}
+                            WHERE id_usuario = %s;
+                            ''',
+                            [*usuario_valores, id_usuario],
+                        )
+
+                    if funcionario_campos:
+                        cursor.execute(
+                            f'''
+                            UPDATE funcionario
+                            SET {', '.join(funcionario_campos)}
+                            WHERE id_usuario = %s;
+                            ''',
+                            [*funcionario_valores, id_usuario],
+                        )
+
+                    cursor.execute(
+                        '''
+                        SELECT u.id_usuario, u.nome, u.email, u.endereco, u.status,
+                               f.cargo, f.setor, f.observacao
+                        FROM funcionario f
+                        JOIN usuario u ON u.id_usuario = f.id_usuario
+                        WHERE f.id_usuario = %s;
+                        ''',
+                        [id_usuario],
+                    )
+                    funcionario = dictfetchone(cursor)
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+        return Response(
+            {
+                'mensagem': 'Conta atualizada com sucesso.',
+                'funcionario': funcionario,
+            }
+        )
+
+    def delete(self, request, id_usuario):
+        usuario_autenticado, erro = obter_usuario_autenticado(request)
+        if erro:
+            return erro
+
+        if usuario_autenticado['id_usuario'] != id_usuario:
+            return erro_permissao('Voce nao tem permissao para remover esta conta.')
+
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    UPDATE usuario
+                    SET status = 'INATIVO'
+                    WHERE id_usuario = %s
+                      AND EXISTS (
+                          SELECT 1
+                          FROM funcionario
+                          WHERE funcionario.id_usuario = usuario.id_usuario
+                      )
+                    RETURNING id_usuario;
+                    ''',
+                    [id_usuario],
+                )
+                funcionario = cursor.fetchone()
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+        if not funcionario:
+            return Response({'erro': 'Registro nao encontrado.'}, status=404)
+
+        return Response({'mensagem': 'Conta desativada com sucesso.'})
 
 
 class EmprestimoListCreateView(APIView):
@@ -714,6 +1105,47 @@ class AlunoHistoricoEmprestimosView(APIView):
             return Response({'erro': 'Aluno nao encontrado.'}, status=404)
 
         return Response(historico)
+
+
+class AlunoEmprestimosPorStatusView(APIView):
+    def get(self, request, id_aluno):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    '''
+                    SELECT u.id_usuario, u.nome, u.email,
+                           a.matricula, a.curso
+                    FROM aluno a
+                    JOIN usuario u ON u.id_usuario = a.id_usuario
+                    WHERE a.id_usuario = %s;
+                    ''',
+                    [id_aluno],
+                )
+                aluno = dictfetchone(cursor)
+
+                if not aluno:
+                    return Response({'erro': 'Aluno nao encontrado.'}, status=404)
+
+                cursor.execute(
+                    '''
+                    SELECT e.status,
+                           COUNT(e.id_emprestimo) AS quantidade
+                    FROM realiza_emprestimo re
+                    JOIN emprestimo e ON e.id_emprestimo = re.id_emprestimo
+                    WHERE re.id_aluno = %s
+                    GROUP BY e.status
+                    ORDER BY e.status;
+                    ''',
+                    [id_aluno],
+                )
+                resumo = [
+                    {'status': row[0], 'quantidade': row[1]}
+                    for row in cursor.fetchall()
+                ]
+        except (IntegrityError, DatabaseError) as exc:
+            return erro_banco(exc)
+
+        return Response({'aluno': aluno, 'resumo': resumo})
 
 
 class LivrosPorCategoriaView(APIView):

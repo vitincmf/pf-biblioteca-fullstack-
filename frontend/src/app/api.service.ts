@@ -112,8 +112,46 @@ export class ApiService {
     return this.http.get<any[]>(`${this.baseUrl}/alunos/`);
   }
 
+  detalheAluno(idUsuario: number) {
+    return this.http.get<any>(`${this.baseUrl}/alunos/${idUsuario}/`);
+  }
+
+  atualizarAluno(idUsuario: number, payload: any) {
+    return this.http.patch<any>(
+      `${this.baseUrl}/alunos/${idUsuario}/`,
+      payload,
+      this.authOptions()
+    );
+  }
+
+  removerAluno(idUsuario: number) {
+    return this.http.delete<any>(
+      `${this.baseUrl}/alunos/${idUsuario}/`,
+      this.authOptions()
+    );
+  }
+
   listarFuncionarios() {
     return this.http.get<any[]>(`${this.baseUrl}/funcionarios/`);
+  }
+
+  detalheFuncionario(idUsuario: number) {
+    return this.http.get<any>(`${this.baseUrl}/funcionarios/${idUsuario}/`);
+  }
+
+  atualizarFuncionario(idUsuario: number, payload: any) {
+    return this.http.patch<any>(
+      `${this.baseUrl}/funcionarios/${idUsuario}/`,
+      payload,
+      this.authOptions()
+    );
+  }
+
+  removerFuncionario(idUsuario: number) {
+    return this.http.delete<any>(
+      `${this.baseUrl}/funcionarios/${idUsuario}/`,
+      this.authOptions()
+    );
   }
 
   listarEmprestimos() {
@@ -134,6 +172,12 @@ export class ApiService {
 
   historicoAluno(idAluno: number) {
     return this.http.get<any>(`${this.baseUrl}/alunos/${idAluno}/historico/`);
+  }
+
+  emprestimosPorStatusAluno(idAluno: number) {
+    return this.http.get<any>(
+      `${this.baseUrl}/alunos/${idAluno}/relatorios/emprestimos-por-status/`
+    );
   }
 
   relatorioHistoricoGeral() {
