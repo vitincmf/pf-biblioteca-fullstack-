@@ -5,6 +5,10 @@ from ..db import dictfetchone
 from ..responses import erro_nao_autenticado, erro_nao_encontrado, erro_permissao
 
 
+def status_ativo(status):
+    return str(status or '').strip().upper() == 'ATIVO'
+
+
 def validar_senha(senha, mensagem_obrigatoria):
     if not senha:
         return mensagem_obrigatoria
@@ -43,6 +47,9 @@ def obter_usuario_autenticado(request):
     if not usuario:
         return None, erro_nao_encontrado('Usuario autenticado nao encontrado.')
 
+    if not status_ativo(usuario['status']):
+        return None, erro_permissao('Usuario inativo. Login nao permitido.')
+
     return usuario, None
 
 
@@ -68,7 +75,7 @@ def obter_funcionario_ativo_da_requisicao(request):
     if not funcionario:
         return None, erro_permissao('Apenas funcionario pode executar esta operacao.')
 
-    if funcionario['status'] != 'ATIVO':
+    if not status_ativo(funcionario['status']):
         return None, erro_permissao(
             'Funcionario inativo nao pode executar esta operacao.'
         )

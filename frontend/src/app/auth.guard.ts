@@ -12,6 +12,11 @@ export const authGuard: CanActivateFn = (route) => {
     return router.createUrlTree(['/login']);
   }
 
+  if (!api.statusAtivo(usuario)) {
+    api.logout();
+    return router.createUrlTree(['/login']);
+  }
+
   if (perfilEsperado && usuario.perfil !== perfilEsperado) {
     if (usuario.perfil === 'aluno') {
       return router.createUrlTree(['/aluno/dashboard']);
@@ -21,6 +26,7 @@ export const authGuard: CanActivateFn = (route) => {
       return router.createUrlTree(['/funcionario/dashboard']);
     }
 
+    api.logout();
     return router.createUrlTree(['/login']);
   }
 

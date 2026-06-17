@@ -25,8 +25,17 @@ export class ApiService {
     return { headers };
   }
 
+  statusAtivo(usuario: UsuarioLogado | null): boolean {
+    return String(usuario?.status || '').trim().toUpperCase() === 'ATIVO';
+  }
+
   salvarUsuario(usuario: UsuarioLogado) {
-    localStorage.setItem(this.storageKey, JSON.stringify(usuario));
+    this.logout();
+    const usuarioNormalizado: UsuarioLogado = {
+      ...usuario,
+      status: String(usuario.status || '').trim().toUpperCase()
+    };
+    localStorage.setItem(this.storageKey, JSON.stringify(usuarioNormalizado));
   }
 
   obterUsuarioAtual(): UsuarioLogado | null {
@@ -34,9 +43,18 @@ export class ApiService {
     if (!raw) return null;
 
     try {
-      return JSON.parse(raw) as UsuarioLogado;
+      const usuario = JSON.parse(raw) as UsuarioLogado;
+      if (!usuario?.id_usuario || !this.statusAtivo(usuario)) {
+        this.logout();
+        return null;
+      }
+
+      return {
+        ...usuario,
+        status: String(usuario.status || '').trim().toUpperCase()
+      };
     } catch {
-      localStorage.removeItem(this.storageKey);
+      this.logout();
       return null;
     }
   }
@@ -50,11 +68,12 @@ export class ApiService {
   }
 
   estaLogado(): boolean {
-    return !!this.obterUsuarioAtual();
+    return this.statusAtivo(this.obterUsuarioAtual());
   }
 
   logout() {
     localStorage.removeItem(this.storageKey);
+    sessionStorage.removeItem(this.storageKey);
   }
 
   login(payload: { email: string; senha: string }) {
